@@ -36,6 +36,18 @@ scene.add(grid);
 const axes = new THREE.AxesHelper(50);
 scene.add(axes);
 
+// Lighting for shading
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
+scene.add(ambientLight);
+
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight1.position.set(1, -1, 2);
+scene.add(dirLight1);
+
+const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+dirLight2.position.set(-1, 1, -1);
+scene.add(dirLight2);
+
 // ---- State ----
 
 let pathMeshes: THREE.Mesh[] = [];
@@ -227,10 +239,8 @@ window.addEventListener('message', (event: MessageEvent) => {
 
         let zSum = 0;
         for (let i = 2; i < positions.length; i += 3) { zSum += positions[i]; }
-        const color = valueToColor((zSum / len - zMin) / zRange);
-
         const geometry = buildDiamondTube(positions, len);
-        const material = new THREE.MeshBasicMaterial({ color, side: THREE.FrontSide });
+        const material = new THREE.MeshPhongMaterial({ color: 0xffffff, side: THREE.FrontSide, flatShading: true, shininess: 60 });
         const mesh = new THREE.Mesh(geometry, material);
         scene.add(mesh);
         pathMeshes.push(mesh);
