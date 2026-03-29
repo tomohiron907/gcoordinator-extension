@@ -42,37 +42,28 @@ scene.add(axes);
 
 let pathLines: THREE.Line[] = [];
 
-// ---- Sliders ----
+// ---- Slider ----
+// The slider is vertical on the right side.
+// slider value 0 (handle at bottom) → show all layers
+// slider value N-1 (handle at top)  → show only the bottom layer
+// This is achieved by inverting: maxVisibleIndex = totalPaths - 1 - sliderValue
 
-const minSlider = document.getElementById('min-slider') as HTMLInputElement;
-const maxSlider = document.getElementById('max-slider') as HTMLInputElement;
-const minValLabel = document.getElementById('min-val') as HTMLElement;
-const maxValLabel = document.getElementById('max-val') as HTMLElement;
-const pathCountLabel = document.getElementById('path-count') as HTMLElement;
+const slider = document.getElementById('layer-slider') as HTMLInputElement;
+const sliderValLabel = document.getElementById('layer-val') as HTMLElement;
+const totalLabel = document.getElementById('layer-total') as HTMLElement;
 
-function applySliders(): void {
-    const lo = parseInt(minSlider.value, 10);
-    const hi = parseInt(maxSlider.value, 10);
-    minValLabel.textContent = lo.toString();
-    maxValLabel.textContent = hi.toString();
+function applySlider(): void {
+    const total = pathLines.length;
+    if (total === 0) { return; }
+    // slider value = maxVisible index (top = max = all layers, bottom = 0 = one layer)
+    const maxVisible = parseInt(slider.value, 10);
+    sliderValLabel.textContent = String(maxVisible + 1);
     pathLines.forEach((line, i) => {
-        line.visible = i >= lo && i <= hi;
+        line.visible = i <= maxVisible;
     });
 }
 
-minSlider.addEventListener('input', () => {
-    if (parseInt(minSlider.value, 10) > parseInt(maxSlider.value, 10)) {
-        maxSlider.value = minSlider.value;
-    }
-    applySliders();
-});
-
-maxSlider.addEventListener('input', () => {
-    if (parseInt(maxSlider.value, 10) < parseInt(minSlider.value, 10)) {
-        minSlider.value = maxSlider.value;
-    }
-    applySliders();
-});
+slider.addEventListener('input', applySlider);
 
 // ---- Helpers ----
 
@@ -154,14 +145,14 @@ window.addEventListener('message', (event: MessageEvent) => {
         offset += len;
     }
 
-    // Reset sliders
+    // Reset slider
     const total = path_lengths.length;
-    minSlider.max = String(total - 1);
-    maxSlider.max = String(total - 1);
-    minSlider.value = '0';
-    maxSlider.value = String(total - 1);
-    pathCountLabel.textContent = `${total} paths`;
-    applySliders();
+    slider.min = '0';
+    slider.max = String(total - 1);
+    slider.value = String(total - 1); // handle at top = show all layers
+    totalLabel.textContent = String(total);
+    sliderValLabel.textContent = String(total);
+    applySlider();
 });
 
 // ---- Animation loop ----

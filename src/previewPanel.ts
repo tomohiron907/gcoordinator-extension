@@ -67,20 +67,12 @@ export class PreviewPanel {
   <title>gcoordinator Preview</title>
 </head>
 <body>
-  <div id="controls">
-    <div class="slider-group">
-      <label>Min Layer</label>
-      <input type="range" id="min-slider" min="0" max="0" value="0">
-      <span id="min-val">0</span>
-    </div>
-    <div class="slider-group">
-      <label>Max Layer</label>
-      <input type="range" id="max-slider" min="0" max="0" value="0">
-      <span id="max-val">0</span>
-    </div>
-    <div id="path-count"></div>
-  </div>
   <div id="canvas-container"></div>
+  <div id="slider-panel">
+    <span id="layer-total">0</span>
+    <input type="range" id="layer-slider" min="0" max="0" value="0">
+    <span id="layer-val">0</span>
+  </div>
   <script src="${scriptUri}"></script>
 </body>
 </html>`;
