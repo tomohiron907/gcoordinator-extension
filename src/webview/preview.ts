@@ -73,6 +73,9 @@ function applyVerticalSlider(): void {
         pathMeshes[currentTopIndex].geometry.setDrawRange(0, (prevN - 1) * 24);
     }
 
+    // Restore any dimming from curve slider
+    dimLowerLayers(false);
+
     // Update layer visibility
     vValLabel.textContent = String(maxVisible + 1);
     pathMeshes.forEach((mesh, i) => {
@@ -98,15 +101,26 @@ const hSlider      = document.getElementById('curve-slider') as HTMLInputElement
 const hValLabel    = document.getElementById('curve-val')   as HTMLElement;
 const hTotalLabel  = document.getElementById('curve-total') as HTMLElement;
 
+function dimLowerLayers(dim: boolean): void {
+    pathMeshes.forEach((mesh, i) => {
+        if (i < currentTopIndex) {
+            (mesh.material as THREE.MeshPhongMaterial).color.setHex(dim ? 0x555555 : 0xffffff);
+        }
+    });
+}
+
 function applyHorizontalSlider(): void {
     if (currentTopIndex < 0 || pathMeshes.length === 0) { return; }
     const pointCount = parseInt(hSlider.value, 10);
+    const maxPoints  = parseInt(hSlider.max,   10);
     const indexCount = Math.max(0, pointCount - 1) * 24;
     pathMeshes[currentTopIndex].geometry.setDrawRange(0, indexCount);
     hValLabel.textContent = String(pointCount);
+    dimLowerLayers(pointCount < maxPoints);
 }
 
 hSlider.addEventListener('input', applyHorizontalSlider);
+hSlider.addEventListener('change', () => dimLowerLayers(false));
 
 // ---- Helpers ----
 
