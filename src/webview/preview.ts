@@ -49,10 +49,27 @@ const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
 dirLight2.position.set(-1, 1, -1);
 scene.add(dirLight2);
 
+// ---- Nozzle cone ----
+
+const NOZZLE_HEIGHT = 10;
+const nozzleGeo = new THREE.ConeGeometry(4, NOZZLE_HEIGHT, 16);
+const nozzleMat = new THREE.MeshPhongMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+});
+const nozzleMesh = new THREE.Mesh(nozzleGeo, nozzleMat);
+nozzleMesh.rotation.x = -Math.PI / 2; // tip points down (-Z)
+nozzleMesh.visible = false;
+scene.add(nozzleMesh);
+
 // ---- State ----
 
 let pathMeshes: THREE.Mesh[] = [];
 let storedPathLengths: number[] = [];
+let storedLayerCoords: Float32Array[] = [];
 let currentTopIndex = -1;
 
 // ---- Vertical slider (layer range) ----
@@ -91,6 +108,7 @@ function applyVerticalSlider(): void {
     hSlider.value = String(topLen); // show full curve by default
     hValLabel.textContent  = String(topLen);
     hTotalLabel.textContent = String(topLen);
+    updateNozzle(maxVisible, topLen - 1);
 }
 
 vSlider.addEventListener('input', applyVerticalSlider);
@@ -117,9 +135,24 @@ function applyHorizontalSlider(): void {
     pathMeshes[currentTopIndex].geometry.setDrawRange(0, indexCount);
     hValLabel.textContent = String(pointCount);
     dimLowerLayers(pointCount < maxPoints);
+    updateNozzle(currentTopIndex, pointCount - 1);
 }
 
 hSlider.addEventListener('input', applyHorizontalSlider);
+
+// ---- Nozzle update ----
+
+function updateNozzle(layerIndex: number, pointIndex: number): void {
+    const coords = storedLayerCoords[layerIndex];
+    if (!coords) { nozzleMesh.visible = false; return; }
+
+    nozzleMesh.position.set(
+        coords[pointIndex * 3],
+        coords[pointIndex * 3 + 1],
+        coords[pointIndex * 3 + 2] + NOZZLE_HEIGHT / 2
+    );
+    nozzleMesh.visible = true;
+}
 
 // ---- Helpers ----
 
@@ -232,6 +265,7 @@ window.addEventListener('message', (event: MessageEvent) => {
         (mesh.material as THREE.Material).dispose();
     });
     pathMeshes = [];
+    storedLayerCoords = [];
 
     const { path_lengths, coords_b64 } = msg;
     storedPathLengths = path_lengths;
@@ -258,6 +292,7 @@ window.addEventListener('message', (event: MessageEvent) => {
         const mesh = new THREE.Mesh(geometry, material);
         scene.add(mesh);
         pathMeshes.push(mesh);
+        storedLayerCoords.push(positions);
         offset += len;
     }
 
@@ -280,6 +315,7 @@ window.addEventListener('message', (event: MessageEvent) => {
 
     // Apply both sliders
     pathMeshes.forEach((mesh, i) => { mesh.visible = i <= currentTopIndex; });
+    updateNozzle(total - 1, topLen - 1);
 });
 
 // ---- Animation loop ----
