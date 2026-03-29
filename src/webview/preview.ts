@@ -38,7 +38,7 @@ scene.add(axes);
 
 // ---- State ----
 
-let pathLines: THREE.Line[] = [];
+let pathMeshes: THREE.Mesh[] = [];
 let storedPathLengths: number[] = [];
 let currentTopIndex = -1;
 
@@ -49,20 +49,21 @@ const vValLabel  = document.getElementById('layer-val')   as HTMLElement;
 const totalLabel = document.getElementById('layer-total') as HTMLElement;
 
 function applyVerticalSlider(): void {
-    const total = pathLines.length;
+    const total = pathMeshes.length;
     if (total === 0) { return; }
 
     const maxVisible = parseInt(vSlider.value, 10);
 
     // Restore previous top layer to full draw range before switching
-    if (currentTopIndex >= 0 && currentTopIndex < pathLines.length) {
-        pathLines[currentTopIndex].geometry.setDrawRange(0, storedPathLengths[currentTopIndex]);
+    if (currentTopIndex >= 0 && currentTopIndex < pathMeshes.length) {
+        const prevN = storedPathLengths[currentTopIndex];
+        pathMeshes[currentTopIndex].geometry.setDrawRange(0, (prevN - 1) * 24);
     }
 
     // Update layer visibility
     vValLabel.textContent = String(maxVisible + 1);
-    pathLines.forEach((line, i) => {
-        line.visible = i <= maxVisible;
+    pathMeshes.forEach((mesh, i) => {
+        mesh.visible = i <= maxVisible;
     });
 
     currentTopIndex = maxVisible;
@@ -85,10 +86,11 @@ const hValLabel    = document.getElementById('curve-val')   as HTMLElement;
 const hTotalLabel  = document.getElementById('curve-total') as HTMLElement;
 
 function applyHorizontalSlider(): void {
-    if (currentTopIndex < 0 || pathLines.length === 0) { return; }
-    const count = parseInt(hSlider.value, 10);
-    pathLines[currentTopIndex].geometry.setDrawRange(0, count);
-    hValLabel.textContent = String(count);
+    if (currentTopIndex < 0 || pathMeshes.length === 0) { return; }
+    const pointCount = parseInt(hSlider.value, 10);
+    const indexCount = Math.max(0, pointCount - 1) * 24;
+    pathMeshes[currentTopIndex].geometry.setDrawRange(0, indexCount);
+    hValLabel.textContent = String(pointCount);
 }
 
 hSlider.addEventListener('input', applyHorizontalSlider);
@@ -109,6 +111,82 @@ function valueToColor(t: number): THREE.Color {
     return new THREE.Color().setHSL((t * 240) / 360, 1.0, 0.55);
 }
 
+// ---- Diamond tube geometry builder ----
+
+const _Z_AXIS = new THREE.Vector3(0, 0, 1);
+const _X_AXIS = new THREE.Vector3(1, 0, 0);
+
+function buildDiamondTube(positions: Float32Array, N: number): THREE.BufferGeometry {
+    const posOut   = new Float32Array(12 * N);
+    const indexOut = new Uint32Array((N - 1) * 24);
+
+    // Reuse Vector3 instances to avoid GC pressure in the hot loop
+    const d     = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const up    = new THREE.Vector3();
+    const tmp   = new THREE.Vector3();
+
+    for (let i = 0; i < N; i++) {
+        const prev = i > 0     ? i - 1 : 0;
+        const next = i < N - 1 ? i + 1 : N - 1;
+
+        d.set(
+            positions[next * 3]     - positions[prev * 3],
+            positions[next * 3 + 1] - positions[prev * 3 + 1],
+            positions[next * 3 + 2] - positions[prev * 3 + 2]
+        );
+        if (d.lengthSq() < 1e-20) { d.set(1, 0, 0); }
+        d.normalize();
+
+        right.crossVectors(_Z_AXIS, d);
+        if (right.lengthSq() < 1e-10) { right.crossVectors(_X_AXIS, d); }
+        right.normalize();
+
+        up.crossVectors(d, right).normalize();
+
+        const px = positions[i * 3];
+        const py = positions[i * 3 + 1];
+        const pz = positions[i * 3 + 2];
+        const base = i * 12;
+
+        // right tip (+0.2 * right)
+        tmp.set(px, py, pz).addScaledVector(right, 0.2);
+        posOut[base]     = tmp.x; posOut[base + 1] = tmp.y; posOut[base + 2] = tmp.z;
+
+        // top tip (+0.1 * up)
+        tmp.set(px, py, pz).addScaledVector(up, 0.1);
+        posOut[base + 3] = tmp.x; posOut[base + 4] = tmp.y; posOut[base + 5] = tmp.z;
+
+        // left tip (-0.2 * right)
+        tmp.set(px, py, pz).addScaledVector(right, -0.2);
+        posOut[base + 6] = tmp.x; posOut[base + 7] = tmp.y; posOut[base + 8] = tmp.z;
+
+        // bottom tip (-0.1 * up)
+        tmp.set(px, py, pz).addScaledVector(up, -0.1);
+        posOut[base + 9]  = tmp.x; posOut[base + 10] = tmp.y; posOut[base + 11] = tmp.z;
+    }
+
+    // Build index buffer: 4 quads per segment, 2 triangles per quad (CCW from outside)
+    let idx = 0;
+    for (let i = 0; i < N - 1; i++) {
+        const b = i * 4;
+        for (let c = 0; c < 4; c++) {
+            const c1 = (c + 1) & 3; // modulo 4
+            const bi = b + c;
+            const ni = b + c1;
+            const bj = b + 4 + c;
+            const nj = b + 4 + c1;
+            indexOut[idx++] = bi; indexOut[idx++] = ni; indexOut[idx++] = nj;
+            indexOut[idx++] = bi; indexOut[idx++] = nj; indexOut[idx++] = bj;
+        }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(posOut, 3));
+    geo.setIndex(new THREE.BufferAttribute(indexOut, 1));
+    return geo;
+}
+
 // ---- Message handler ----
 
 interface UpdateMessage {
@@ -121,13 +199,13 @@ window.addEventListener('message', (event: MessageEvent) => {
     const msg = event.data as UpdateMessage;
     if (msg.type !== 'update') { return; }
 
-    // Clear old lines
-    pathLines.forEach((line) => {
-        scene.remove(line);
-        line.geometry.dispose();
-        (line.material as THREE.Material).dispose();
+    // Clear old meshes
+    pathMeshes.forEach((mesh) => {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
     });
-    pathLines = [];
+    pathMeshes = [];
 
     const { path_lengths, coords_b64 } = msg;
     storedPathLengths = path_lengths;
@@ -141,7 +219,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     }
     const zRange = zMax - zMin || 1;
 
-    // Build one THREE.Line per path
+    // Build one diamond-tube Mesh per path
     let offset = 0;
     for (let pi = 0; pi < path_lengths.length; pi++) {
         const len = path_lengths[pi];
@@ -151,12 +229,11 @@ window.addEventListener('message', (event: MessageEvent) => {
         for (let i = 2; i < positions.length; i += 3) { zSum += positions[i]; }
         const color = valueToColor((zSum / len - zMin) / zRange);
 
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const material = new THREE.LineBasicMaterial({ color });
-        const line = new THREE.Line(geometry, material);
-        scene.add(line);
-        pathLines.push(line);
+        const geometry = buildDiamondTube(positions, len);
+        const material = new THREE.MeshBasicMaterial({ color, side: THREE.FrontSide });
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+        pathMeshes.push(mesh);
         offset += len;
     }
 
@@ -178,7 +255,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     hTotalLabel.textContent = String(topLen);
 
     // Apply both sliders
-    pathLines.forEach((line, i) => { line.visible = i <= currentTopIndex; });
+    pathMeshes.forEach((mesh, i) => { mesh.visible = i <= currentTopIndex; });
 });
 
 // ---- Animation loop ----
