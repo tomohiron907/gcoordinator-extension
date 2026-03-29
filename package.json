@@ -1,0 +1,52 @@
+{
+  "name": "gcoordinator-extension",
+  "displayName": "gcoordinator",
+  "description": "3D preview for gcoordinator G-code paths",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "gcoordinator.openPreview",
+        "title": "gcoordinator: Open 3D Preview"
+      }
+    ],
+    "configuration": {
+      "title": "gcoordinator",
+      "properties": {
+        "gcoordinator.port": {
+          "type": "number",
+          "default": 5163,
+          "description": "Port number for the gcoordinator preview server"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run build:ext && npm run build:webview",
+    "build:ext": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=out/extension.js",
+    "build:webview": "esbuild src/webview/preview.ts --bundle --outfile=media/preview.bundle.js",
+    "watch": "concurrently \"npm run build:ext -- --watch\" \"npm run build:webview -- --watch\""
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/three": "^0.160.0",
+    "@types/vscode": "^1.80.0",
+    "concurrently": "^8.0.0",
+    "esbuild": "^0.20.0",
+    "three": "^0.160.0",
+    "typescript": "^5.0.0"
+  }
+}

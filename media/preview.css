@@ -1,0 +1,67 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #1e1e1e;
+  color: #cccccc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 12px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.slider-group label {
+  color: #aaaaaa;
+  white-space: nowrap;
+}
+
+.slider-group input[type="range"] {
+  width: 140px;
+  accent-color: #4ea6ff;
+  cursor: pointer;
+}
+
+.slider-group span {
+  min-width: 32px;
+  text-align: right;
+  color: #4ea6ff;
+  font-variant-numeric: tabular-nums;
+}
+
+#path-count {
+  margin-left: auto;
+  color: #888888;
+}
+
+#canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+#canvas-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
