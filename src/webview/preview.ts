@@ -120,7 +120,6 @@ function applyHorizontalSlider(): void {
 }
 
 hSlider.addEventListener('input', applyHorizontalSlider);
-hSlider.addEventListener('change', () => dimLowerLayers(false));
 
 // ---- Helpers ----
 
