@@ -19,7 +19,6 @@ const camera = new THREE.PerspectiveCamera(
     0.1,
     10000
 );
-// Z-up camera: position above and in front, looking at origin
 camera.position.set(50, -180, 120);
 camera.up.set(0, 0, 1);
 camera.lookAt(0, 0, 0);
@@ -34,36 +33,65 @@ const grid = new THREE.GridHelper(200, 20, 0x555555, 0x333333);
 grid.rotation.x = Math.PI / 2;
 scene.add(grid);
 
-// Axes helper
 const axes = new THREE.AxesHelper(50);
 scene.add(axes);
 
 // ---- State ----
 
 let pathLines: THREE.Line[] = [];
+let storedPathLengths: number[] = [];
+let currentTopIndex = -1;
 
-// ---- Slider ----
-// The slider is vertical on the right side.
-// slider value 0 (handle at bottom) → show all layers
-// slider value N-1 (handle at top)  → show only the bottom layer
-// This is achieved by inverting: maxVisibleIndex = totalPaths - 1 - sliderValue
+// ---- Vertical slider (layer range) ----
 
-const slider = document.getElementById('layer-slider') as HTMLInputElement;
-const sliderValLabel = document.getElementById('layer-val') as HTMLElement;
+const vSlider    = document.getElementById('layer-slider') as HTMLInputElement;
+const vValLabel  = document.getElementById('layer-val')   as HTMLElement;
 const totalLabel = document.getElementById('layer-total') as HTMLElement;
 
-function applySlider(): void {
+function applyVerticalSlider(): void {
     const total = pathLines.length;
     if (total === 0) { return; }
-    // slider value = maxVisible index (top = max = all layers, bottom = 0 = one layer)
-    const maxVisible = parseInt(slider.value, 10);
-    sliderValLabel.textContent = String(maxVisible + 1);
+
+    const maxVisible = parseInt(vSlider.value, 10);
+
+    // Restore previous top layer to full draw range before switching
+    if (currentTopIndex >= 0 && currentTopIndex < pathLines.length) {
+        pathLines[currentTopIndex].geometry.setDrawRange(0, storedPathLengths[currentTopIndex]);
+    }
+
+    // Update layer visibility
+    vValLabel.textContent = String(maxVisible + 1);
     pathLines.forEach((line, i) => {
         line.visible = i <= maxVisible;
     });
+
+    currentTopIndex = maxVisible;
+
+    // Sync horizontal slider to the new top layer
+    const topLen = storedPathLengths[maxVisible];
+    hSlider.min   = '1';
+    hSlider.max   = String(topLen);
+    hSlider.value = String(topLen); // show full curve by default
+    hValLabel.textContent  = String(topLen);
+    hTotalLabel.textContent = String(topLen);
 }
 
-slider.addEventListener('input', applySlider);
+vSlider.addEventListener('input', applyVerticalSlider);
+
+// ---- Horizontal slider (curve range of the top layer) ----
+
+const hSlider      = document.getElementById('curve-slider') as HTMLInputElement;
+const hValLabel    = document.getElementById('curve-val')   as HTMLElement;
+const hTotalLabel  = document.getElementById('curve-total') as HTMLElement;
+
+function applyHorizontalSlider(): void {
+    if (currentTopIndex < 0 || pathLines.length === 0) { return; }
+    const count = parseInt(hSlider.value, 10);
+    pathLines[currentTopIndex].geometry.setDrawRange(0, count);
+    hValLabel.textContent = String(count);
+}
+
+hSlider.addEventListener('input', applyHorizontalSlider);
 
 // ---- Helpers ----
 
@@ -76,13 +104,9 @@ function b64ToFloat32Array(b64: string): Float32Array {
     return new Float32Array(bytes.buffer);
 }
 
-/**
- * Map a normalized value [0, 1] to an RGB color using HSL (red → green → blue).
- */
 function valueToColor(t: number): THREE.Color {
-    // hue: 0 (red) at bottom, 240 (blue) at top
-    const hue = t * 240 / 360;
-    return new THREE.Color().setHSL(hue, 1.0, 0.55);
+    // hue: red (0°) at bottom → blue (240°) at top
+    return new THREE.Color().setHSL((t * 240) / 360, 1.0, 0.55);
 }
 
 // ---- Message handler ----
@@ -95,11 +119,9 @@ interface UpdateMessage {
 
 window.addEventListener('message', (event: MessageEvent) => {
     const msg = event.data as UpdateMessage;
-    if (msg.type !== 'update') {
-        return;
-    }
+    if (msg.type !== 'update') { return; }
 
-    // Remove old lines from scene
+    // Clear old lines
     pathLines.forEach((line) => {
         scene.remove(line);
         line.geometry.dispose();
@@ -108,11 +130,11 @@ window.addEventListener('message', (event: MessageEvent) => {
     pathLines = [];
 
     const { path_lengths, coords_b64 } = msg;
+    storedPathLengths = path_lengths;
     const allCoords = b64ToFloat32Array(coords_b64);
 
-    // Compute Z range for color mapping
-    let zMin = Infinity;
-    let zMax = -Infinity;
+    // Z range for color mapping
+    let zMin = Infinity, zMax = -Infinity;
     for (let i = 2; i < allCoords.length; i += 3) {
         if (allCoords[i] < zMin) { zMin = allCoords[i]; }
         if (allCoords[i] > zMax) { zMax = allCoords[i]; }
@@ -123,17 +145,11 @@ window.addEventListener('message', (event: MessageEvent) => {
     let offset = 0;
     for (let pi = 0; pi < path_lengths.length; pi++) {
         const len = path_lengths[pi];
-        const start = offset * 3;
-        const end = start + len * 3;
-        const positions = allCoords.slice(start, end);
+        const positions = allCoords.slice(offset * 3, (offset + len) * 3);
 
-        // Average Z for color
         let zSum = 0;
-        for (let i = 2; i < positions.length; i += 3) {
-            zSum += positions[i];
-        }
-        const zAvg = zSum / len;
-        const color = valueToColor((zAvg - zMin) / zRange);
+        for (let i = 2; i < positions.length; i += 3) { zSum += positions[i]; }
+        const color = valueToColor((zSum / len - zMin) / zRange);
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -141,18 +157,28 @@ window.addEventListener('message', (event: MessageEvent) => {
         const line = new THREE.Line(geometry, material);
         scene.add(line);
         pathLines.push(line);
-
         offset += len;
     }
 
-    // Reset slider
+    // Reset vertical slider
     const total = path_lengths.length;
-    slider.min = '0';
-    slider.max = String(total - 1);
-    slider.value = String(total - 1); // handle at top = show all layers
+    vSlider.min   = '0';
+    vSlider.max   = String(total - 1);
+    vSlider.value = String(total - 1); // top = show all
     totalLabel.textContent = String(total);
-    sliderValLabel.textContent = String(total);
-    applySlider();
+    vValLabel.textContent  = String(total);
+    currentTopIndex = total - 1;
+
+    // Reset horizontal slider for the top layer
+    const topLen = path_lengths[total - 1];
+    hSlider.min   = '1';
+    hSlider.max   = String(topLen);
+    hSlider.value = String(topLen);
+    hValLabel.textContent  = String(topLen);
+    hTotalLabel.textContent = String(topLen);
+
+    // Apply both sliders
+    pathLines.forEach((line, i) => { line.visible = i <= currentTopIndex; });
 });
 
 // ---- Animation loop ----

@@ -15,6 +15,14 @@ body {
   overflow: hidden;
 }
 
+/* Left+center: canvas + horizontal slider stacked vertically */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 #canvas-container {
   flex: 1;
   position: relative;
@@ -27,8 +35,44 @@ body {
   height: 100% !important;
 }
 
+/* Horizontal slider panel at the bottom */
+#hslider-panel {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: #2d2d2d;
+  border-top: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+#curve-slider {
+  flex: 1;
+  accent-color: #4ea6ff;
+  cursor: pointer;
+}
+
+#curve-total {
+  width: 40px;
+  text-align: left;
+  color: #666666;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+#curve-val {
+  width: 40px;
+  text-align: right;
+  color: #4ea6ff;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
 /* Vertical slider panel on the right */
-#slider-panel {
+#vslider-panel {
   width: 48px;
   display: flex;
   flex-direction: column;
@@ -37,25 +81,24 @@ body {
   padding: 12px 0;
   background: #2d2d2d;
   border-left: 1px solid #3c3c3c;
-}
-
-#layer-total,
-#layer-val {
-  color: #4ea6ff;
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  text-align: center;
-  line-height: 1.4;
+  flex-shrink: 0;
 }
 
 #layer-total {
   color: #666666;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
 }
 
-/* Vertical range input */
+#layer-val {
+  color: #4ea6ff;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
 #layer-slider {
   writing-mode: vertical-lr;
-  direction: rtl;        /* top = max value, bottom = min value */
+  direction: rtl;       /* top = max value (all layers), bottom = min value */
   flex: 1;
   margin: 8px 0;
   width: 28px;

@@ -67,8 +67,15 @@ export class PreviewPanel {
   <title>gcoordinator Preview</title>
 </head>
 <body>
-  <div id="canvas-container"></div>
-  <div id="slider-panel">
+  <div id="main">
+    <div id="canvas-container"></div>
+    <div id="hslider-panel">
+      <span id="curve-val">0</span>
+      <input type="range" id="curve-slider" min="1" max="1" value="1">
+      <span id="curve-total">0</span>
+    </div>
+  </div>
+  <div id="vslider-panel">
     <span id="layer-total">0</span>
     <input type="range" id="layer-slider" min="0" max="0" value="0">
     <span id="layer-val">0</span>
