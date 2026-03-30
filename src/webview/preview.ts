@@ -68,6 +68,7 @@ scene.add(nozzleMesh);
 // ---- State ----
 
 let pathMeshes: THREE.Mesh[] = [];
+let travelLines: THREE.Line[] = [];
 let storedPathLengths: number[] = [];
 let storedLayerCoords: Float32Array[] = [];
 let currentTopIndex = -1;
@@ -97,6 +98,9 @@ function applyVerticalSlider(): void {
     vValLabel.textContent = String(maxVisible + 1);
     pathMeshes.forEach((mesh, i) => {
         mesh.visible = i <= maxVisible;
+    });
+    travelLines.forEach((line, i) => {
+        line.visible = (i + 1) <= maxVisible;
     });
 
     currentTopIndex = maxVisible;
@@ -265,6 +269,12 @@ window.addEventListener('message', (event: MessageEvent) => {
         (mesh.material as THREE.Material).dispose();
     });
     pathMeshes = [];
+    travelLines.forEach((line) => {
+        scene.remove(line);
+        line.geometry.dispose();
+        (line.material as THREE.Material).dispose();
+    });
+    travelLines = [];
     storedLayerCoords = [];
 
     const { path_lengths, coords_b64 } = msg;
@@ -296,6 +306,27 @@ window.addEventListener('message', (event: MessageEvent) => {
         offset += len;
     }
 
+    // Build travel lines between consecutive paths
+    for (let pi = 0; pi < path_lengths.length - 1; pi++) {
+        const endCoords   = storedLayerCoords[pi];
+        const startCoords = storedLayerCoords[pi + 1];
+        const endLen = path_lengths[pi];
+        const pts = new Float32Array([
+            endCoords[(endLen - 1) * 3],
+            endCoords[(endLen - 1) * 3 + 1],
+            endCoords[(endLen - 1) * 3 + 2],
+            startCoords[0],
+            startCoords[1],
+            startCoords[2],
+        ]);
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+        const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.3, transparent: true });
+        const line = new THREE.Line(geo, mat);
+        scene.add(line);
+        travelLines.push(line);
+    }
+
     // Reset vertical slider
     const total = path_lengths.length;
     vSlider.min   = '0';
@@ -315,6 +346,7 @@ window.addEventListener('message', (event: MessageEvent) => {
 
     // Apply both sliders
     pathMeshes.forEach((mesh, i) => { mesh.visible = i <= currentTopIndex; });
+    travelLines.forEach((line, i) => { line.visible = (i + 1) <= currentTopIndex; });
     updateNozzle(total - 1, topLen - 1);
 });
 
