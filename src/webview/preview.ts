@@ -321,7 +321,7 @@ window.addEventListener('message', (event: MessageEvent) => {
         ]);
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
-        const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.3, transparent: true });
+        const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true });
         const line = new THREE.Line(geo, mat);
         scene.add(line);
         travelLines.push(line);
