@@ -10,6 +10,7 @@ export class GCodePreviewPanel {
     private parseResult: GCodeParseResult | undefined;
     private selectionDisposable: vscode.Disposable | undefined;
     private seekTimer: ReturnType<typeof setTimeout> | null = null;
+    private lastSeekTime = 0;
     private disposed = false;
 
     private constructor(extensionUri: vscode.Uri) {
@@ -124,10 +125,18 @@ export class GCodePreviewPanel {
         if (!this.parseResult || !this.document) { return; }
         if (event.textEditor.document !== this.document) { return; }
         const line = event.textEditor.selection.active.line;
+        const now = Date.now();
+        const elapsed = now - this.lastSeekTime;
         if (this.seekTimer) { clearTimeout(this.seekTimer); }
-        this.seekTimer = setTimeout(() => {
-            this.doSeek(line, this.parseResult!.lineIndex.length);
-        }, 50);
+        if (elapsed >= 50) {
+            this.lastSeekTime = now;
+            this.doSeek(line, this.parseResult.lineIndex.length);
+        } else {
+            this.seekTimer = setTimeout(() => {
+                this.lastSeekTime = Date.now();
+                this.doSeek(line, this.parseResult!.lineIndex.length);
+            }, 50 - elapsed);
+        }
     }
 
     private doSeek(line: number, totalLines: number): void {
