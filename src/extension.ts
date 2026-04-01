@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { PreviewServer } from './server';
 import { PreviewPanel } from './previewPanel';
+import { GCodePreviewPanel } from './gcodePreviewPanel';
 
 let server: PreviewServer | undefined;
 
@@ -27,6 +28,22 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     context.subscriptions.push(openCmd);
+
+    // Command to preview the currently open G-code file
+    const gcodeCmd = vscode.commands.registerCommand('gcoordinator.previewGCode', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showWarningMessage('Open a .gcode file first.');
+            return;
+        }
+        if (!editor.document.fileName.match(/\.gcode$/i)) {
+            vscode.window.showWarningMessage('Active file is not a .gcode file.');
+            return;
+        }
+        await GCodePreviewPanel.createOrShow(context.extensionUri, editor.document);
+    });
+
+    context.subscriptions.push(gcodeCmd);
 }
 
 export function deactivate(): void {
