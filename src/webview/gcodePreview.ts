@@ -20,17 +20,18 @@ const camera = new THREE.PerspectiveCamera(
     0.1,
     10000
 );
-camera.position.set(50, -180, 120);
+camera.position.set(150, -80, 120);
 camera.up.set(0, 0, 1);
-camera.lookAt(0, 0, 0);
+camera.lookAt(100, 100, 0);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.target.set(0, 0, 0);
+controls.target.set(100, 100, 0);
 
 const grid = new THREE.GridHelper(200, 20, 0x555555, 0x333333);
 grid.rotation.x = Math.PI / 2;
+grid.position.set(100, 100, 0);
 scene.add(grid);
 
 const axes = new THREE.AxesHelper(50);
