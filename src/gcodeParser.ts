@@ -23,6 +23,7 @@ interface State {
     z: number;
     e: number;
     absoluteE: boolean;
+    absoluteXYZ: boolean;
     units: 'mm' | 'in';
 }
 
@@ -52,7 +53,7 @@ function parseLine(line: string): { gcode: string | null; params: Record<string,
 }
 
 export async function parseGCode(lines: string[]): Promise<GCodeParseResult> {
-    const state: State = { x: 0, y: 0, z: 0, e: 0, absoluteE: false, units: 'mm' };
+    const state: State = { x: 0, y: 0, z: 0, e: 0, absoluteE: false, absoluteXYZ: true, units: 'mm' };
 
     const finishedSegs: Segment[] = [];
     let currentPoints: number[] = [];
@@ -103,9 +104,9 @@ export async function parseGCode(lines: string[]): Promise<GCodeParseResult> {
             return;
         }
 
-        const targetX = params['x'] ?? state.x;
-        const targetY = params['y'] ?? state.y;
-        const targetZ = params['z'] ?? state.z;
+        const targetX = state.absoluteXYZ ? (params['x'] ?? state.x) : state.x + (params['x'] ?? 0);
+        const targetY = state.absoluteXYZ ? (params['y'] ?? state.y) : state.y + (params['y'] ?? 0);
+        const targetZ = state.absoluteXYZ ? (params['z'] ?? state.z) : state.z + (params['z'] ?? 0);
 
         let isTravel: boolean;
         if (isG0) {
@@ -132,9 +133,9 @@ export async function parseGCode(lines: string[]): Promise<GCodeParseResult> {
     }
 
     function handleArcMove(params: Record<string, number>, cw: boolean): void {
-        const targetX = params['x'] ?? state.x;
-        const targetY = params['y'] ?? state.y;
-        const targetZ = params['z'] ?? state.z;
+        const targetX = state.absoluteXYZ ? (params['x'] ?? state.x) : state.x + (params['x'] ?? 0);
+        const targetY = state.absoluteXYZ ? (params['y'] ?? state.y) : state.y + (params['y'] ?? 0);
+        const targetZ = state.absoluteXYZ ? (params['z'] ?? state.z) : state.z + (params['z'] ?? 0);
         const eVal = params['e'];
 
         let isTravel: boolean;
@@ -242,6 +243,12 @@ export async function parseGCode(lines: string[]): Promise<GCodeParseResult> {
                     state.x = 0;
                     state.y = 0;
                     state.z = 0;
+                    break;
+                case 'g90':
+                    state.absoluteXYZ = true;
+                    break;
+                case 'g91':
+                    state.absoluteXYZ = false;
                     break;
                 case 'm82':
                     state.absoluteE = true;
