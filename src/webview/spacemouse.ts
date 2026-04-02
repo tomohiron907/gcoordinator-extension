@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // ---- Constants ----
 
 const SCALE_T  = 0.003;   // translation: raw ±500 → world units/frame
-const SCALE_R  = 0.0015;  // rotation: raw ±500 → radians/frame
+const SCALE_R  = 0.0003;  // rotation: raw ±500 → radians/frame
 const DEADZONE = 10;      // ignore raw values below this threshold
 
 // ---- State (updated by postMessage from extension host) ----

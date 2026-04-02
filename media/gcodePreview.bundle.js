@@ -20728,7 +20728,7 @@
 
   // src/webview/spacemouse.ts
   var SCALE_T = 3e-3;
-  var SCALE_R = 15e-4;
+  var SCALE_R = 3e-4;
   var DEADZONE = 10;
   var state = {
     type: "spacemouse",
