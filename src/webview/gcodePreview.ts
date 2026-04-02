@@ -261,6 +261,11 @@ function applySeek(segIdx: number, pointIdx: number, lineNum: number, totalLines
     // Clamp
     const si = Math.min(segIdx, count - 1);
 
+    // Determine current Z height for layer dimming
+    const curMeta = segmentMetas[si];
+    const curPi = Math.min(pointIdx, curMeta.pointCount - 1);
+    const currentZ = curPi >= 0 ? allCoords[curMeta.floatOffset + curPi * 3 + 2] : 0;
+
     for (let i = 0; i < count; i++) {
         const obj = objects[i];
         const meta = segmentMetas[i];
@@ -274,7 +279,13 @@ function applySeek(segIdx: number, pointIdx: number, lineNum: number, totalLines
             } else {
                 obj.geometry.setDrawRange(0, N);
             }
+            // Dim segments below the current layer
+            const segZ = allCoords[meta.floatOffset + 2];
+            const dim = segZ < currentZ - 0.001;
+            (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.setHex(dim ? 0x555555 : 0xffffff);
         } else if (i === si) {
+            // Current segment: always bright
+            (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.setHex(0xffffff);
             // Partial: show up to pointIdx
             const pi = Math.min(pointIdx, N - 1);
             if (pi <= 0) {

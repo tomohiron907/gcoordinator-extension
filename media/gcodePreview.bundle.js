@@ -20926,6 +20926,9 @@
       return;
     }
     const si = Math.min(segIdx, count - 1);
+    const curMeta = segmentMetas[si];
+    const curPi = Math.min(pointIdx, curMeta.pointCount - 1);
+    const currentZ = curPi >= 0 ? allCoords[curMeta.floatOffset + curPi * 3 + 2] : 0;
     for (let i = 0; i < count; i++) {
       const obj = objects[i];
       const meta = segmentMetas[i];
@@ -20937,7 +20940,11 @@
         } else {
           obj.geometry.setDrawRange(0, N);
         }
+        const segZ = allCoords[meta.floatOffset + 2];
+        const dim = segZ < currentZ - 1e-3;
+        obj.material.color.setHex(dim ? 5592405 : 16777215);
       } else if (i === si) {
+        obj.material.color.setHex(16777215);
         const pi = Math.min(pointIdx, N - 1);
         if (pi <= 0) {
           obj.visible = false;
