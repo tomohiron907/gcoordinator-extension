@@ -70,12 +70,8 @@ export class GCodePreviewPanel {
                 this.parseResult = result;
                 this.postUpdate(result, lines.length);
 
-                // Seek to current cursor position
-                const editor = vscode.window.activeTextEditor;
-                if (editor && editor.document === document) {
-                    const line = editor.selection.active.line;
-                    this.doSeek(line, lines.length);
-                }
+                // Show full G-code on initial load (no dimming)
+                this.panel.webview.postMessage({ type: 'gcode-show-all' });
             }
         );
     }

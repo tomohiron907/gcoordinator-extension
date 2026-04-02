@@ -20918,8 +20918,22 @@
       }
     } else if (msg.type === "gcode-seek") {
       applySeek(msg.segIdx, msg.pointIdx, msg.lineNum, msg.totalLines);
+    } else if (msg.type === "gcode-show-all") {
+      applyShowAll();
     }
   });
+  function applyShowAll() {
+    nozzleMesh.visible = false;
+    for (let i = 0; i < objects.length; i++) {
+      const obj = objects[i];
+      const meta = segmentMetas[i];
+      const N = meta.pointCount;
+      obj.visible = true;
+      obj.geometry.setDrawRange(0, meta.isTravel ? N : (N - 1) * 24);
+      obj.material.color.setHex(16777215);
+    }
+    lineInfoEl.textContent = "";
+  }
   function applySeek(segIdx, pointIdx, lineNum, totalLines) {
     const count = objects.length;
     if (count === 0) {

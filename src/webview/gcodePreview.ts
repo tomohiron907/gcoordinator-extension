@@ -192,8 +192,12 @@ interface GCodeSeekMsg {
     totalLines: number;
 }
 
+interface GCodeShowAllMsg {
+    type: 'gcode-show-all';
+}
+
 window.addEventListener('message', (event: MessageEvent) => {
-    const msg = event.data as GCodeUpdateMsg | GCodeSeekMsg;
+    const msg = event.data as GCodeUpdateMsg | GCodeSeekMsg | GCodeShowAllMsg;
 
     if (msg.type === 'gcode-update') {
         // Clear old objects
@@ -251,8 +255,23 @@ window.addEventListener('message', (event: MessageEvent) => {
 
     } else if (msg.type === 'gcode-seek') {
         applySeek(msg.segIdx, msg.pointIdx, msg.lineNum, msg.totalLines);
+    } else if (msg.type === 'gcode-show-all') {
+        applyShowAll();
     }
 });
+
+function applyShowAll(): void {
+    nozzleMesh.visible = false;
+    for (let i = 0; i < objects.length; i++) {
+        const obj = objects[i];
+        const meta = segmentMetas[i];
+        const N = meta.pointCount;
+        obj.visible = true;
+        obj.geometry.setDrawRange(0, meta.isTravel ? N : (N - 1) * 24);
+        (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.setHex(0xffffff);
+    }
+    lineInfoEl.textContent = '';
+}
 
 function applySeek(segIdx: number, pointIdx: number, lineNum: number, totalLines: number): void {
     const count = objects.length;
