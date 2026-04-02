@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { initSpaceMouse, applySpaceMouseToCamera } from './spacemouse';
 
 // ---- Scene setup (same as preview.ts) ----
 
@@ -28,6 +29,8 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.target.set(100, 100, 0);
+
+initSpaceMouse();
 
 const grid = new THREE.GridHelper(200, 20, 0x555555, 0x333333);
 grid.rotation.x = Math.PI / 2;
@@ -338,6 +341,7 @@ function applySeek(segIdx: number, pointIdx: number, lineNum: number, totalLines
 
 function animate(): void {
     requestAnimationFrame(animate);
+    applySpaceMouseToCamera(camera, controls);
     controls.update();
     const camDist = camera.position.distanceTo(controls.target);
     const fog = scene.fog as THREE.Fog;

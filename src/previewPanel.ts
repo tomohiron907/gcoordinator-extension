@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PathData } from './server';
+import { SpaceMouseState } from './spacemouseHost';
 
 export class PreviewPanel {
     static instance: PreviewPanel | undefined;
@@ -7,7 +8,11 @@ export class PreviewPanel {
     private readonly panel: vscode.WebviewPanel;
     private readonly extensionUri: vscode.Uri;
 
-    private constructor(extensionUri: vscode.Uri) {
+    private constructor(
+        extensionUri: vscode.Uri,
+        onOpened: () => void,
+        onClosed: () => void,
+    ) {
         this.extensionUri = extensionUri;
         this.panel = vscode.window.createWebviewPanel(
             'gcoordinatorPreview',
@@ -22,16 +27,26 @@ export class PreviewPanel {
         this.panel.webview.html = this.buildHtml();
         this.panel.onDidDispose(() => {
             PreviewPanel.instance = undefined;
+            onClosed();
         });
+        onOpened();
     }
 
-    static createOrShow(extensionUri: vscode.Uri): PreviewPanel {
+    static createOrShow(
+        extensionUri: vscode.Uri,
+        onOpened: () => void = () => {},
+        onClosed:  () => void = () => {},
+    ): PreviewPanel {
         if (PreviewPanel.instance) {
             PreviewPanel.instance.panel.reveal(vscode.ViewColumn.Beside, true);
             return PreviewPanel.instance;
         }
-        PreviewPanel.instance = new PreviewPanel(extensionUri);
+        PreviewPanel.instance = new PreviewPanel(extensionUri, onOpened, onClosed);
         return PreviewPanel.instance;
+    }
+
+    postSpaceMouse(state: SpaceMouseState): void {
+        this.panel.webview.postMessage(state);
     }
 
     postData(data: PathData): void {
@@ -79,6 +94,14 @@ export class PreviewPanel {
     <span id="layer-total">0</span>
     <input type="range" id="layer-slider" min="0" max="0" value="0">
     <span id="layer-val">0</span>
+  </div>
+  <div id="spacemouse-overlay">
+    <div id="sm-status">SpaceMouse: starting...</div>
+    <table>
+      <tr><td>Tx</td><td id="sm-tx">0</td><td>Rx</td><td id="sm-rx">0</td></tr>
+      <tr><td>Ty</td><td id="sm-ty">0</td><td>Ry</td><td id="sm-ry">0</td></tr>
+      <tr><td>Tz</td><td id="sm-tz">0</td><td>Rz</td><td id="sm-rz">0</td></tr>
+    </table>
   </div>
   <script src="${scriptUri}"></script>
 </body>

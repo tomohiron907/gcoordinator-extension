@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { initSpaceMouse, applySpaceMouseToCamera } from './spacemouse';
 
 // ---- Scene setup ----
 
@@ -28,6 +29,8 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.target.set(0, 0, 0);
+
+initSpaceMouse();
 
 // Grid in XY plane (Z=0 is the printer bed)
 const grid = new THREE.GridHelper(200, 20, 0x555555, 0x333333);
@@ -354,6 +357,7 @@ window.addEventListener('message', (event: MessageEvent) => {
 
 function animate(): void {
     requestAnimationFrame(animate);
+    applySpaceMouseToCamera(camera, controls);
     controls.update();
     // Scale fog proportionally to camera distance so depth cues work at any zoom level
     const camDist = camera.position.distanceTo(controls.target);

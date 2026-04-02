@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { parseGCode, GCodeParseResult } from './gcodeParser';
+import { SpaceMouseState } from './spacemouseHost';
 
 export class GCodePreviewPanel {
     static instance: GCodePreviewPanel | undefined;
@@ -13,7 +14,11 @@ export class GCodePreviewPanel {
     private lastSeekTime = 0;
     private disposed = false;
 
-    private constructor(extensionUri: vscode.Uri) {
+    private constructor(
+        extensionUri: vscode.Uri,
+        onOpened: () => void,
+        onClosed: () => void,
+    ) {
         this.extensionUri = extensionUri;
         this.panel = vscode.window.createWebviewPanel(
             'gcodePreview',
@@ -31,10 +36,17 @@ export class GCodePreviewPanel {
             this.selectionDisposable?.dispose();
             if (this.seekTimer) { clearTimeout(this.seekTimer); }
             GCodePreviewPanel.instance = undefined;
+            onClosed();
         });
+        onOpened();
     }
 
-    static async createOrShow(extensionUri: vscode.Uri, document: vscode.TextDocument): Promise<void> {
+    static async createOrShow(
+        extensionUri: vscode.Uri,
+        document: vscode.TextDocument,
+        onOpened: () => void = () => {},
+        onClosed:  () => void = () => {},
+    ): Promise<void> {
         if (GCodePreviewPanel.instance) {
             GCodePreviewPanel.instance.panel.reveal(vscode.ViewColumn.Beside, true);
             if (GCodePreviewPanel.instance.document?.uri.toString() !== document.uri.toString()) {
@@ -42,7 +54,7 @@ export class GCodePreviewPanel {
             }
             return;
         }
-        const panel = new GCodePreviewPanel(extensionUri);
+        const panel = new GCodePreviewPanel(extensionUri, onOpened, onClosed);
         GCodePreviewPanel.instance = panel;
         await panel.loadDocument(document);
     }
@@ -74,6 +86,11 @@ export class GCodePreviewPanel {
                 this.panel.webview.postMessage({ type: 'gcode-show-all' });
             }
         );
+    }
+
+    postSpaceMouse(state: SpaceMouseState): void {
+        if (this.disposed) { return; }
+        this.panel.webview.postMessage(state);
     }
 
     private postUpdate(result: GCodeParseResult, totalLines: number): void {
@@ -168,6 +185,14 @@ export class GCodePreviewPanel {
   <div id="main">
     <div id="canvas-container"></div>
     <div id="line-info">Line 0</div>
+  </div>
+  <div id="spacemouse-overlay">
+    <div id="sm-status">SpaceMouse: starting...</div>
+    <table>
+      <tr><td>Tx</td><td id="sm-tx">0</td><td>Rx</td><td id="sm-rx">0</td></tr>
+      <tr><td>Ty</td><td id="sm-ty">0</td><td>Ry</td><td id="sm-ry">0</td></tr>
+      <tr><td>Tz</td><td id="sm-tz">0</td><td>Rz</td><td id="sm-rz">0</td></tr>
+    </table>
   </div>
   <script src="${scriptUri}"></script>
 </body>
