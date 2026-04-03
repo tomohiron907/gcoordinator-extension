@@ -21009,19 +21009,53 @@
     const scaledRx = rx * rotScale;
     const scaledRz = rz * rotScale;
     camera2.getWorldDirection(_forward);
-    _right.crossVectors(_forward, camera2.up).normalize();
+    _right.crossVectors(_forward, _worldZ);
+    if (_right.lengthSq() < 1e-6) {
+      _right.set(1, 0, 0);
+    } else {
+      _right.normalize();
+    }
+    const MIN_POLAR = 0.05;
+    const MAX_POLAR = Math.PI - 0.05;
     if (scaledRx !== 0) {
-      _pitchQ.setFromAxisAngle(_right, -scaledRx);
-      _orbitOffset.applyQuaternion(_pitchQ);
+      const offsetLen = _orbitOffset.length();
+      if (offsetLen > 0) {
+        const currentPolar = Math.acos(MathUtils.clamp(_orbitOffset.z / offsetLen, -1, 1));
+        const maxUp = currentPolar - MIN_POLAR;
+        const maxDown = MAX_POLAR - currentPolar;
+        const clampedRx = scaledRx > 0 ? Math.min(scaledRx, maxUp) : Math.max(scaledRx, -maxDown);
+        if (clampedRx !== 0) {
+          _pitchQ.setFromAxisAngle(_right, -clampedRx);
+          _orbitOffset.applyQuaternion(_pitchQ);
+        }
+      }
     }
     if (scaledRz !== 0) {
       _yawQ.setFromAxisAngle(_worldZ, scaledRz);
       _orbitOffset.applyQuaternion(_yawQ);
     }
+    const _offsetLen = _orbitOffset.length();
+    if (_offsetLen > 0) {
+      const polar = Math.acos(MathUtils.clamp(_orbitOffset.z / _offsetLen, -1, 1));
+      if (polar < MIN_POLAR || polar > MAX_POLAR) {
+        const p = MathUtils.clamp(polar, MIN_POLAR, MAX_POLAR);
+        const az = Math.atan2(_orbitOffset.y, _orbitOffset.x);
+        _orbitOffset.set(
+          Math.sin(p) * Math.cos(az) * _offsetLen,
+          Math.sin(p) * Math.sin(az) * _offsetLen,
+          Math.cos(p) * _offsetLen
+        );
+      }
+    }
     camera2.position.copy(_orbitCenter).add(_orbitOffset).add(_panAccum);
     camera2.up.set(0, 0, 1);
     camera2.getWorldDirection(_forward);
-    _right.crossVectors(_forward, camera2.up).normalize();
+    _right.crossVectors(_forward, _worldZ);
+    if (_right.lengthSq() < 1e-6) {
+      _right.set(1, 0, 0);
+    } else {
+      _right.normalize();
+    }
     if (scaledTx !== 0) {
       const d = -scaledTx;
       camera2.position.addScaledVector(_right, d);

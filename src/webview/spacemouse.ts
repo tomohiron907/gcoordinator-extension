@@ -238,19 +238,54 @@ export function applySpaceMouseToCamera(
     const scaledRz = rz * rotScale;
 
 
-    // _forward/_right are based on the quaternion set by controls.update() last frame
-    // (i.e., the direction the user currently sees)
+    // _forward/_right from the quaternion set by controls.update() last frame.
+    // When the camera looks nearly straight up/down, cross(forward, worldZ) → 0;
+    // fall back to world X to keep the pitch axis well-defined.
     camera.getWorldDirection(_forward);
-    _right.crossVectors(_forward, camera.up).normalize();
+    _right.crossVectors(_forward, _worldZ);
+    if (_right.lengthSq() < 1e-6) { _right.set(1, 0, 0); } else { _right.normalize(); }
 
-    // 1. Orbit: rotate _orbitOffset only (pan is tracked separately in _panAccum)
+    const MIN_POLAR = 0.05;           // ~3° from zenith
+    const MAX_POLAR = Math.PI - 0.05; // ~3° from nadir
+
+    // 1. Orbit: rotate _orbitOffset only (pan is tracked separately in _panAccum).
+    //    For pitch, pre-clamp the rotation angle so one large input cannot overshoot
+    //    the pole even in a single frame.
     if (scaledRx !== 0) {
-        _pitchQ.setFromAxisAngle(_right, -scaledRx);
-        _orbitOffset.applyQuaternion(_pitchQ);
+        const offsetLen = _orbitOffset.length();
+        if (offsetLen > 0) {
+            const currentPolar = Math.acos(THREE.MathUtils.clamp(_orbitOffset.z / offsetLen, -1, 1));
+            // Maximum pitch allowed without crossing the pole
+            const maxUp   = currentPolar - MIN_POLAR;   // how far we can tilt up
+            const maxDown = MAX_POLAR - currentPolar;   // how far we can tilt down
+            // scaledRx > 0 tilts up (polar decreases), < 0 tilts down (polar increases)
+            const clampedRx = scaledRx > 0
+                ? Math.min(scaledRx, maxUp)
+                : Math.max(scaledRx, -maxDown);
+            if (clampedRx !== 0) {
+                _pitchQ.setFromAxisAngle(_right, -clampedRx);
+                _orbitOffset.applyQuaternion(_pitchQ);
+            }
+        }
     }
     if (scaledRz !== 0) {
         _yawQ.setFromAxisAngle(_worldZ, scaledRz);
         _orbitOffset.applyQuaternion(_yawQ);
+    }
+
+    // Post-rotation safety clamp (catches any floating-point drift)
+    const _offsetLen = _orbitOffset.length();
+    if (_offsetLen > 0) {
+        const polar = Math.acos(THREE.MathUtils.clamp(_orbitOffset.z / _offsetLen, -1, 1));
+        if (polar < MIN_POLAR || polar > MAX_POLAR) {
+            const p  = THREE.MathUtils.clamp(polar, MIN_POLAR, MAX_POLAR);
+            const az = Math.atan2(_orbitOffset.y, _orbitOffset.x);
+            _orbitOffset.set(
+                Math.sin(p) * Math.cos(az) * _offsetLen,
+                Math.sin(p) * Math.sin(az) * _offsetLen,
+                Math.cos(p) * _offsetLen
+            );
+        }
     }
 
     // Reconstruct camera position from components
@@ -261,7 +296,8 @@ export function applySpaceMouseToCamera(
     //    This keeps the camera-to-target offset intact so OrbitControls.update()
     //    does NOT rotate the camera to look back at a fixed point.
     camera.getWorldDirection(_forward);
-    _right.crossVectors(_forward, camera.up).normalize();
+    _right.crossVectors(_forward, _worldZ);
+    if (_right.lengthSq() < 1e-6) { _right.set(1, 0, 0); } else { _right.normalize(); }
 
     if (scaledTx !== 0) {
         const d = -scaledTx;
