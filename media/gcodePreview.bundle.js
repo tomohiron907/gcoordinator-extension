@@ -20916,6 +20916,7 @@
   var _screenCenter = new Vector2(0, 0);
   var _floorPlane = new Plane(new Vector3(0, 0, 1), 0);
   var _planeHit = new Vector3();
+  var _vtx = new Vector3();
   var _getMeshes = null;
   var _orbitSphere = null;
   var _wasActive = false;
@@ -20936,6 +20937,27 @@
     _orbitSphere.visible = false;
     scene2.add(_orbitSphere);
   }
+  function closestVertexToPoint(meshes, reference, out) {
+    let bestSq = Infinity;
+    let found = false;
+    for (const mesh of meshes) {
+      const pos = mesh.geometry.getAttribute("position");
+      if (!pos) {
+        continue;
+      }
+      const mat = mesh.matrixWorld;
+      for (let i = 0; i < pos.count; i++) {
+        _vtx.fromBufferAttribute(pos, i).applyMatrix4(mat);
+        const sq = _vtx.distanceToSquared(reference);
+        if (sq < bestSq) {
+          bestSq = sq;
+          out.copy(_vtx);
+          found = true;
+        }
+      }
+    }
+    return found;
+  }
   function updateOrbitCenter(camera2, controls2) {
     if (!_getMeshes) {
       return;
@@ -20947,14 +20969,16 @@
       _orbitCenter.copy(hits[0].point);
     } else {
       if (_raycaster.ray.intersectPlane(_floorPlane, _planeHit)) {
-        _orbitCenter.copy(_planeHit);
+        if (meshes.length > 0 && closestVertexToPoint(meshes, _planeHit, _orbitCenter)) {
+        } else {
+          _orbitCenter.copy(_planeHit);
+        }
       } else {
         _orbitCenter.copy(controls2.target);
       }
     }
-    _orbitOffset.subVectors(camera2.position, _orbitCenter);
-    _panAccum.set(0, 0, 0);
-    controls2.target.copy(_orbitCenter);
+    _panAccum.subVectors(controls2.target, _orbitCenter);
+    _orbitOffset.subVectors(camera2.position, _orbitCenter).sub(_panAccum);
     if (_orbitSphere) {
       _orbitSphere.position.copy(_orbitCenter);
       _orbitSphere.visible = true;

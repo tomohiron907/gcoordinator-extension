@@ -76,6 +76,7 @@ const _raycaster    = new THREE.Raycaster();
 const _screenCenter = new THREE.Vector2(0, 0);
 const _floorPlane   = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 const _planeHit     = new THREE.Vector3();
+const _vtx          = new THREE.Vector3(); // reused for vertex world-position scan
 
 let _getMeshes: (() => THREE.Mesh[]) | null = null;
 let _orbitSphere: THREE.Mesh | null = null;
@@ -103,6 +104,26 @@ export function setupSpaceMouseScene(
     scene.add(_orbitSphere);
 }
 
+/**
+ * Scan all visible mesh vertices and return the world-space vertex
+ * closest to `reference`. Returns false if no vertices found.
+ */
+function closestVertexToPoint(meshes: THREE.Mesh[], reference: THREE.Vector3, out: THREE.Vector3): boolean {
+    let bestSq = Infinity;
+    let found  = false;
+    for (const mesh of meshes) {
+        const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute | null;
+        if (!pos) { continue; }
+        const mat = mesh.matrixWorld;
+        for (let i = 0; i < pos.count; i++) {
+            _vtx.fromBufferAttribute(pos, i).applyMatrix4(mat);
+            const sq = _vtx.distanceToSquared(reference);
+            if (sq < bestSq) { bestSq = sq; out.copy(_vtx); found = true; }
+        }
+    }
+    return found;
+}
+
 function updateOrbitCenter(camera: THREE.PerspectiveCamera, controls: OrbitControls): void {
     if (!_getMeshes) { return; }
 
@@ -114,18 +135,27 @@ function updateOrbitCenter(camera: THREE.PerspectiveCamera, controls: OrbitContr
     if (hits.length > 0) {
         _orbitCenter.copy(hits[0].point);
     } else {
-        // Fallback: intersect with Z=0 plane (printer bed)
+        // Fallback: Z=0 plane intersection, then snap to the nearest object vertex.
+        // This prevents choosing a pivot that is far from all geometry.
         if (_raycaster.ray.intersectPlane(_floorPlane, _planeHit)) {
-            _orbitCenter.copy(_planeHit);
+            if (meshes.length > 0 && closestVertexToPoint(meshes, _planeHit, _orbitCenter)) {
+                // _orbitCenter now holds the nearest vertex on any visible mesh
+            } else {
+                _orbitCenter.copy(_planeHit);
+            }
         } else {
             _orbitCenter.copy(controls.target);
         }
     }
 
-    // Decompose camera position into orbit offset + pan accumulation
-    _orbitOffset.subVectors(camera.position, _orbitCenter);
-    _panAccum.set(0, 0, 0);
-    controls.target.copy(_orbitCenter);
+    // Keep controls.target (and thus camera look-direction) unchanged so there
+    // is no visual jump when a new gesture session starts.
+    // _panAccum absorbs the difference between the new _orbitCenter and the
+    // current controls.target so that the invariant holds:
+    //   camera.position === _orbitCenter + _orbitOffset + _panAccum
+    //   controls.target  === _orbitCenter + _panAccum
+    _panAccum.subVectors(controls.target, _orbitCenter);
+    _orbitOffset.subVectors(camera.position, _orbitCenter).sub(_panAccum);
 
     if (_orbitSphere) {
         _orbitSphere.position.copy(_orbitCenter);
