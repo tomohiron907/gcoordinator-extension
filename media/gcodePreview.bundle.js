@@ -18191,27 +18191,6 @@
   var WebGL1Renderer = class extends WebGLRenderer {
   };
   WebGL1Renderer.prototype.isWebGL1Renderer = true;
-  var Fog = class _Fog {
-    constructor(color, near = 1, far = 1e3) {
-      this.isFog = true;
-      this.name = "";
-      this.color = new Color(color);
-      this.near = near;
-      this.far = far;
-    }
-    clone() {
-      return new _Fog(this.color, this.near, this.far);
-    }
-    toJSON() {
-      return {
-        type: "Fog",
-        name: this.name,
-        color: this.color.getHex(),
-        near: this.near,
-        far: this.far
-      };
-    }
-  };
   var Scene = class extends Object3D {
     constructor() {
       super();
@@ -20859,6 +20838,7 @@
   // src/webview/spacemouse.ts
   var SCALE_T = 3e-3;
   var SCALE_R = 3e-4;
+  var DOLLY_MULT = 3;
   var DEADZONE = 10;
   var REF_DIST = 150;
   var SPHERE_SHOW_MS = 1500;
@@ -21052,8 +21032,9 @@
       _panAccum.addScaledVector(_worldZ, scaledTz);
     }
     if (scaledTy !== 0) {
-      camera2.position.addScaledVector(_forward, scaledTy);
-      _orbitOffset.addScaledVector(_forward, scaledTy);
+      const dolly = scaledTy * DOLLY_MULT;
+      camera2.position.addScaledVector(_forward, dolly);
+      _orbitOffset.addScaledVector(_forward, dolly);
     }
   }
 
@@ -21065,7 +21046,7 @@
   renderer.setClearColor(1973790);
   container.appendChild(renderer.domElement);
   var scene = new Scene();
-  scene.fog = new Fog(1973790, 150, 600);
+  scene.fog = null;
   var camera = new PerspectiveCamera(
     60,
     container.clientWidth / container.clientHeight,
@@ -21324,10 +21305,6 @@
     _lastFrameTime = now;
     applySpaceMouseToCamera(camera, controls, delta);
     controls.update();
-    const camDist = camera.position.distanceTo(controls.target);
-    const fog = scene.fog;
-    fog.near = camDist * 0.3;
-    fog.far = camDist * 2;
     renderer.render(scene, camera);
   }
   animate();

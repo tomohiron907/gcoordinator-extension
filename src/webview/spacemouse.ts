@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 const SCALE_T  = 0.003;   // translation: raw ±500 → world units/frame
 const SCALE_R  = 0.0003;  // rotation: raw ±500 → radians/frame
+const DOLLY_MULT = 3;   // dolly (zoom) speed multiplier relative to pan
 const DEADZONE = 10;      // ignore raw values below this threshold
 
 const REF_DIST     = 150;  // reference camera distance for speed scaling
@@ -271,8 +272,9 @@ export function applySpaceMouseToCamera(
     // 3. Dolly: move camera along forward; update _orbitOffset so rotation
     //    stays consistent after zoom
     if (scaledTy !== 0) {
-        camera.position.addScaledVector(_forward, scaledTy);
-        _orbitOffset.addScaledVector(_forward, scaledTy);
+        const dolly = scaledTy * DOLLY_MULT;
+        camera.position.addScaledVector(_forward, dolly);
+        _orbitOffset.addScaledVector(_forward, dolly);
     }
 
     // Sphere stays fixed at _orbitCenter — no position update needed here

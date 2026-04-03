@@ -13,7 +13,7 @@ renderer.setClearColor(0x1e1e1e);
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x1e1e1e, 150, 600); // updated dynamically in animate()
+scene.fog = null;
 
 const camera = new THREE.PerspectiveCamera(
     60,
@@ -365,11 +365,6 @@ function animate(): void {
     _lastFrameTime = now;
     applySpaceMouseToCamera(camera, controls, delta);
     controls.update();
-    // Scale fog proportionally to camera distance so depth cues work at any zoom level
-    const camDist = camera.position.distanceTo(controls.target);
-    const fog = scene.fog as THREE.Fog;
-    fog.near = camDist * 0.3;
-    fog.far  = camDist * 2.0;
     renderer.render(scene, camera);
 }
 animate();
