@@ -20836,10 +20836,12 @@
   };
 
   // src/webview/spacemouse.ts
-  var SCALE_T = 3e-3;
-  var SCALE_R = 3e-4;
-  var DOLLY_MULT = 3;
   var DEADZONE = 10;
+  var SCALE_PAN_LR = 3e-3;
+  var SCALE_PAN_UD = 3e-3;
+  var SCALE_DOLLY = 9e-3;
+  var SCALE_YAW = 3e-4;
+  var SCALE_PITCH = 3e-4;
   var REF_DIST = 150;
   var SPHERE_SHOW_MS = 1500;
   var state = {
@@ -20977,11 +20979,11 @@
     if (!state.connected) {
       return;
     }
-    const tx = dz(state.tx) * SCALE_T;
-    const ty = dz(state.ty) * SCALE_T;
-    const tz = dz(state.tz) * SCALE_T;
-    const rx = dz(state.rx) * SCALE_R;
-    const rz = dz(state.rz) * SCALE_R;
+    const tx = dz(state.tx) * SCALE_PAN_LR;
+    const ty = dz(state.ty) * SCALE_DOLLY;
+    const tz = dz(state.tz) * SCALE_PAN_UD;
+    const rx = dz(state.rx) * SCALE_PITCH;
+    const rz = dz(state.rz) * SCALE_YAW;
     const isActive = tx !== 0 || ty !== 0 || tz !== 0 || rx !== 0 || rz !== 0;
     if (!isActive) {
       if (_orbitSphere && _orbitSphere.visible) {
@@ -21032,9 +21034,8 @@
       _panAccum.addScaledVector(_worldZ, scaledTz);
     }
     if (scaledTy !== 0) {
-      const dolly = scaledTy * DOLLY_MULT;
-      camera2.position.addScaledVector(_forward, dolly);
-      _orbitOffset.addScaledVector(_forward, dolly);
+      camera2.position.addScaledVector(_forward, scaledTy);
+      _orbitOffset.addScaledVector(_forward, scaledTy);
     }
   }
 

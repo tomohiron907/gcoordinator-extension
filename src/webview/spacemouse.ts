@@ -3,10 +3,15 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 // ---- Constants ----
 
-const SCALE_T  = 0.003;   // translation: raw ±500 → world units/frame
-const SCALE_R  = 0.0003;  // rotation: raw ±500 → radians/frame
-const DOLLY_MULT = 3;   // dolly (zoom) speed multiplier relative to pan
 const DEADZONE = 10;      // ignore raw values below this threshold
+
+// ---- Per-axis speed multipliers (tune these to taste) ----
+// Base scale: raw SpaceMouse value ±500 → raw world units/frame before distance scaling
+const SCALE_PAN_LR   = 0.003;  // 左右 pan (Tx)
+const SCALE_PAN_UD   = 0.003;  // 上下 pan (Tz)
+const SCALE_DOLLY    = 0.009;  // 奥手前 dolly (Ty)  ← SCALE_PAN * 3 相当
+const SCALE_YAW      = 0.0003; // ターン / 水平回転 (Rz)
+const SCALE_PITCH    = 0.0003; // 見下ろし / 俯仰回転 (Rx)
 
 const REF_DIST     = 150;  // reference camera distance for speed scaling
 const SPHERE_SHOW_MS = 1500; // ms after input stops before hiding orbit indicator
@@ -194,11 +199,11 @@ export function applySpaceMouseToCamera(
 ): void {
     if (!state.connected) { return; }
 
-    const tx = dz(state.tx) * SCALE_T;
-    const ty = dz(state.ty) * SCALE_T;
-    const tz = dz(state.tz) * SCALE_T;
-    const rx = dz(state.rx) * SCALE_R;
-    const rz = dz(state.rz) * SCALE_R;
+    const tx = dz(state.tx) * SCALE_PAN_LR;
+    const ty = dz(state.ty) * SCALE_DOLLY;
+    const tz = dz(state.tz) * SCALE_PAN_UD;
+    const rx = dz(state.rx) * SCALE_PITCH;
+    const rz = dz(state.rz) * SCALE_YAW;
 
     const isActive = tx !== 0 || ty !== 0 || tz !== 0 || rx !== 0 || rz !== 0;
 
@@ -227,10 +232,11 @@ export function applySpaceMouseToCamera(
     const scaledTx = tx * distScale;
     const scaledTy = ty * distScale;
     const scaledTz = tz * distScale;
-    // Rotation is blended: only partially scaled by distance for comfortable feel
+    // Rotation is only partially scaled by distance (40% blend) for a comfortable feel
     const rotScale = 1.0 + (distScale - 1.0) * 0.4;
     const scaledRx = rx * rotScale;
     const scaledRz = rz * rotScale;
+
 
     // _forward/_right are based on the quaternion set by controls.update() last frame
     // (i.e., the direction the user currently sees)
@@ -272,9 +278,8 @@ export function applySpaceMouseToCamera(
     // 3. Dolly: move camera along forward; update _orbitOffset so rotation
     //    stays consistent after zoom
     if (scaledTy !== 0) {
-        const dolly = scaledTy * DOLLY_MULT;
-        camera.position.addScaledVector(_forward, dolly);
-        _orbitOffset.addScaledVector(_forward, dolly);
+        camera.position.addScaledVector(_forward, scaledTy);
+        _orbitOffset.addScaledVector(_forward, scaledTy);
     }
 
     // Sphere stays fixed at _orbitCenter — no position update needed here
