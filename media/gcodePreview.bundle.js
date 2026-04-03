@@ -18579,6 +18579,78 @@
       return new _ConeGeometry(data.radius, data.height, data.radialSegments, data.heightSegments, data.openEnded, data.thetaStart, data.thetaLength);
     }
   };
+  var SphereGeometry = class _SphereGeometry extends BufferGeometry {
+    constructor(radius = 1, widthSegments = 32, heightSegments = 16, phiStart = 0, phiLength = Math.PI * 2, thetaStart = 0, thetaLength = Math.PI) {
+      super();
+      this.type = "SphereGeometry";
+      this.parameters = {
+        radius,
+        widthSegments,
+        heightSegments,
+        phiStart,
+        phiLength,
+        thetaStart,
+        thetaLength
+      };
+      widthSegments = Math.max(3, Math.floor(widthSegments));
+      heightSegments = Math.max(2, Math.floor(heightSegments));
+      const thetaEnd = Math.min(thetaStart + thetaLength, Math.PI);
+      let index = 0;
+      const grid2 = [];
+      const vertex2 = new Vector3();
+      const normal = new Vector3();
+      const indices = [];
+      const vertices = [];
+      const normals = [];
+      const uvs = [];
+      for (let iy = 0; iy <= heightSegments; iy++) {
+        const verticesRow = [];
+        const v = iy / heightSegments;
+        let uOffset = 0;
+        if (iy === 0 && thetaStart === 0) {
+          uOffset = 0.5 / widthSegments;
+        } else if (iy === heightSegments && thetaEnd === Math.PI) {
+          uOffset = -0.5 / widthSegments;
+        }
+        for (let ix = 0; ix <= widthSegments; ix++) {
+          const u = ix / widthSegments;
+          vertex2.x = -radius * Math.cos(phiStart + u * phiLength) * Math.sin(thetaStart + v * thetaLength);
+          vertex2.y = radius * Math.cos(thetaStart + v * thetaLength);
+          vertex2.z = radius * Math.sin(phiStart + u * phiLength) * Math.sin(thetaStart + v * thetaLength);
+          vertices.push(vertex2.x, vertex2.y, vertex2.z);
+          normal.copy(vertex2).normalize();
+          normals.push(normal.x, normal.y, normal.z);
+          uvs.push(u + uOffset, 1 - v);
+          verticesRow.push(index++);
+        }
+        grid2.push(verticesRow);
+      }
+      for (let iy = 0; iy < heightSegments; iy++) {
+        for (let ix = 0; ix < widthSegments; ix++) {
+          const a = grid2[iy][ix + 1];
+          const b = grid2[iy][ix];
+          const c = grid2[iy + 1][ix];
+          const d = grid2[iy + 1][ix + 1];
+          if (iy !== 0 || thetaStart > 0)
+            indices.push(a, b, d);
+          if (iy !== heightSegments - 1 || thetaEnd < Math.PI)
+            indices.push(b, c, d);
+        }
+      }
+      this.setIndex(indices);
+      this.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+      this.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+      this.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+    }
+    copy(source) {
+      super.copy(source);
+      this.parameters = Object.assign({}, source.parameters);
+      return this;
+    }
+    static fromJSON(data) {
+      return new _SphereGeometry(data.radius, data.widthSegments, data.heightSegments, data.phiStart, data.phiLength, data.thetaStart, data.thetaLength);
+    }
+  };
   var MeshPhongMaterial = class extends Material {
     constructor(parameters) {
       super();
@@ -19787,6 +19859,64 @@
     ]
   ];
   var _controlInterpolantsResultBuffer = new Float32Array(1);
+  var Raycaster = class {
+    constructor(origin, direction, near = 0, far = Infinity) {
+      this.ray = new Ray(origin, direction);
+      this.near = near;
+      this.far = far;
+      this.camera = null;
+      this.layers = new Layers();
+      this.params = {
+        Mesh: {},
+        Line: { threshold: 1 },
+        LOD: {},
+        Points: { threshold: 1 },
+        Sprite: {}
+      };
+    }
+    set(origin, direction) {
+      this.ray.set(origin, direction);
+    }
+    setFromCamera(coords, camera2) {
+      if (camera2.isPerspectiveCamera) {
+        this.ray.origin.setFromMatrixPosition(camera2.matrixWorld);
+        this.ray.direction.set(coords.x, coords.y, 0.5).unproject(camera2).sub(this.ray.origin).normalize();
+        this.camera = camera2;
+      } else if (camera2.isOrthographicCamera) {
+        this.ray.origin.set(coords.x, coords.y, (camera2.near + camera2.far) / (camera2.near - camera2.far)).unproject(camera2);
+        this.ray.direction.set(0, 0, -1).transformDirection(camera2.matrixWorld);
+        this.camera = camera2;
+      } else {
+        console.error("THREE.Raycaster: Unsupported camera type: " + camera2.type);
+      }
+    }
+    intersectObject(object, recursive = true, intersects = []) {
+      intersectObject(object, this, intersects, recursive);
+      intersects.sort(ascSort);
+      return intersects;
+    }
+    intersectObjects(objects2, recursive = true, intersects = []) {
+      for (let i = 0, l = objects2.length; i < l; i++) {
+        intersectObject(objects2[i], this, intersects, recursive);
+      }
+      intersects.sort(ascSort);
+      return intersects;
+    }
+  };
+  function ascSort(a, b) {
+    return a.distance - b.distance;
+  }
+  function intersectObject(object, raycaster, intersects, recursive) {
+    if (object.layers.test(raycaster.layers)) {
+      object.raycast(raycaster, intersects);
+    }
+    if (recursive === true) {
+      const children = object.children;
+      for (let i = 0, l = children.length; i < l; i++) {
+        intersectObject(children[i], raycaster, intersects, true);
+      }
+    }
+  }
   var Spherical = class {
     constructor(radius = 1, phi = 0, theta = 0) {
       this.radius = radius;
@@ -20730,6 +20860,8 @@
   var SCALE_T = 3e-3;
   var SCALE_R = 3e-4;
   var DEADZONE = 10;
+  var REF_DIST = 150;
+  var SPHERE_SHOW_MS = 1500;
   var state = {
     type: "spacemouse",
     tx: 0,
@@ -20780,6 +20912,54 @@
     });
     updateOverlay();
   }
+  var _raycaster = new Raycaster();
+  var _screenCenter = new Vector2(0, 0);
+  var _floorPlane = new Plane(new Vector3(0, 0, 1), 0);
+  var _planeHit = new Vector3();
+  var _getMeshes = null;
+  var _orbitSphere = null;
+  var _wasActive = false;
+  var _sphereHideTimer = 0;
+  var _orbitCenter = new Vector3();
+  var _orbitOffset = new Vector3();
+  var _panAccum = new Vector3();
+  function setupSpaceMouseScene(scene2, getMeshes) {
+    _getMeshes = getMeshes;
+    const geo = new SphereGeometry(2.5, 12, 8);
+    const mat = new MeshBasicMaterial({
+      color: 54527,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false
+    });
+    _orbitSphere = new Mesh(geo, mat);
+    _orbitSphere.visible = false;
+    scene2.add(_orbitSphere);
+  }
+  function updateOrbitCenter(camera2, controls2) {
+    if (!_getMeshes) {
+      return;
+    }
+    _raycaster.setFromCamera(_screenCenter, camera2);
+    const meshes = _getMeshes();
+    const hits = meshes.length > 0 ? _raycaster.intersectObjects(meshes, false) : [];
+    if (hits.length > 0) {
+      _orbitCenter.copy(hits[0].point);
+    } else {
+      if (_raycaster.ray.intersectPlane(_floorPlane, _planeHit)) {
+        _orbitCenter.copy(_planeHit);
+      } else {
+        _orbitCenter.copy(controls2.target);
+      }
+    }
+    _orbitOffset.subVectors(camera2.position, _orbitCenter);
+    _panAccum.set(0, 0, 0);
+    controls2.target.copy(_orbitCenter);
+    if (_orbitSphere) {
+      _orbitSphere.position.copy(_orbitCenter);
+      _orbitSphere.visible = true;
+    }
+  }
   var _forward = new Vector3();
   var _right = new Vector3();
   var _worldZ = new Vector3(0, 0, 1);
@@ -20789,7 +20969,7 @@
   function dz(v) {
     return Math.abs(v) < DEADZONE ? 0 : v;
   }
-  function applySpaceMouseToCamera(camera2, controls2) {
+  function applySpaceMouseToCamera(camera2, controls2, delta) {
     if (!state.connected) {
       return;
     }
@@ -20798,27 +20978,59 @@
     const tz = dz(state.tz) * SCALE_T;
     const rx = dz(state.rx) * SCALE_R;
     const rz = dz(state.rz) * SCALE_R;
-    if (tx === 0 && ty === 0 && tz === 0 && rx === 0 && rz === 0) {
+    const isActive = tx !== 0 || ty !== 0 || tz !== 0 || rx !== 0 || rz !== 0;
+    if (!isActive) {
+      if (_orbitSphere && _orbitSphere.visible) {
+        _sphereHideTimer -= delta;
+        if (_sphereHideTimer <= 0) {
+          _orbitSphere.visible = false;
+        }
+      }
+      _wasActive = false;
       return;
     }
+    if (!_wasActive) {
+      updateOrbitCenter(camera2, controls2);
+    }
+    _wasActive = true;
+    _sphereHideTimer = SPHERE_SHOW_MS;
+    const dist = camera2.position.distanceTo(_orbitCenter);
+    const distScale = Math.max(0.05, dist / REF_DIST);
+    const scaledTx = tx * distScale;
+    const scaledTy = ty * distScale;
+    const scaledTz = tz * distScale;
+    const rotScale = 1 + (distScale - 1) * 0.4;
+    const scaledRx = rx * rotScale;
+    const scaledRz = rz * rotScale;
     camera2.getWorldDirection(_forward);
     _right.crossVectors(_forward, camera2.up).normalize();
-    camera2.position.addScaledVector(_right, -tx);
-    controls2.target.addScaledVector(_right, -tx);
-    camera2.position.addScaledVector(_worldZ, tz);
-    controls2.target.addScaledVector(_worldZ, tz);
-    camera2.position.addScaledVector(_forward, ty);
-    _offset2.subVectors(camera2.position, controls2.target);
-    if (rx !== 0) {
-      _pitchQ.setFromAxisAngle(_right, -rx);
-      _offset2.applyQuaternion(_pitchQ);
+    if (scaledRx !== 0) {
+      _pitchQ.setFromAxisAngle(_right, -scaledRx);
+      _orbitOffset.applyQuaternion(_pitchQ);
     }
-    if (rz !== 0) {
-      _yawQ.setFromAxisAngle(_worldZ, rz);
-      _offset2.applyQuaternion(_yawQ);
+    if (scaledRz !== 0) {
+      _yawQ.setFromAxisAngle(_worldZ, scaledRz);
+      _orbitOffset.applyQuaternion(_yawQ);
     }
-    camera2.position.copy(controls2.target).add(_offset2);
+    camera2.position.copy(_orbitCenter).add(_orbitOffset).add(_panAccum);
     camera2.up.set(0, 0, 1);
+    camera2.getWorldDirection(_forward);
+    _right.crossVectors(_forward, camera2.up).normalize();
+    if (scaledTx !== 0) {
+      const d = -scaledTx;
+      camera2.position.addScaledVector(_right, d);
+      controls2.target.addScaledVector(_right, d);
+      _panAccum.addScaledVector(_right, d);
+    }
+    if (scaledTz !== 0) {
+      camera2.position.addScaledVector(_worldZ, scaledTz);
+      controls2.target.addScaledVector(_worldZ, scaledTz);
+      _panAccum.addScaledVector(_worldZ, scaledTz);
+    }
+    if (scaledTy !== 0) {
+      camera2.position.addScaledVector(_forward, scaledTy);
+      _orbitOffset.addScaledVector(_forward, scaledTy);
+    }
   }
 
   // src/webview/gcodePreview.ts
@@ -20844,6 +21056,7 @@
   controls.dampingFactor = 0.08;
   controls.target.set(100, 100, 0);
   initSpaceMouse();
+  setupSpaceMouseScene(scene, () => objects.filter((o) => o instanceof Mesh && o.visible));
   var grid = new GridHelper(200, 20, 5592405, 3355443);
   grid.rotation.x = Math.PI / 2;
   grid.position.set(100, 100, 0);
@@ -21079,9 +21292,13 @@
     }
     lineInfoEl.textContent = `Line ${lineNum + 1} / ${totalLines}`;
   }
+  var _lastFrameTime = performance.now();
   function animate() {
     requestAnimationFrame(animate);
-    applySpaceMouseToCamera(camera, controls);
+    const now = performance.now();
+    const delta = now - _lastFrameTime;
+    _lastFrameTime = now;
+    applySpaceMouseToCamera(camera, controls, delta);
     controls.update();
     const camDist = camera.position.distanceTo(controls.target);
     const fog = scene.fog;

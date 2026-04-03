@@ -7,6 +7,9 @@ const SCALE_T  = 0.003;   // translation: raw ±500 → world units/frame
 const SCALE_R  = 0.0003;  // rotation: raw ±500 → radians/frame
 const DEADZONE = 10;      // ignore raw values below this threshold
 
+const REF_DIST     = 150;  // reference camera distance for speed scaling
+const SPHERE_SHOW_MS = 1500; // ms after input stops before hiding orbit indicator
+
 // ---- State (updated by postMessage from extension host) ----
 
 interface SpaceMouseState {
@@ -67,6 +70,69 @@ export function initSpaceMouse(): void {
     updateOverlay();
 }
 
+// ---- Scene context for raycasting (set via setupSpaceMouseScene) ----
+
+const _raycaster    = new THREE.Raycaster();
+const _screenCenter = new THREE.Vector2(0, 0);
+const _floorPlane   = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+const _planeHit     = new THREE.Vector3();
+
+let _getMeshes: (() => THREE.Mesh[]) | null = null;
+let _orbitSphere: THREE.Mesh | null = null;
+let _wasActive = false;
+let _sphereHideTimer = 0;
+const _orbitCenter = new THREE.Vector3(); // fixed orbit pivot (sphere position) for the current gesture
+const _orbitOffset = new THREE.Vector3(); // camera offset from _orbitCenter, rotation only (no pan)
+const _panAccum    = new THREE.Vector3(); // accumulated pan since gesture start
+
+export function setupSpaceMouseScene(
+    scene: THREE.Scene,
+    getMeshes: () => THREE.Mesh[]
+): void {
+    _getMeshes = getMeshes;
+
+    const geo = new THREE.SphereGeometry(2.5, 12, 8);
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0x00d4ff,
+        transparent: true,
+        opacity: 0.75,
+        depthWrite: false,
+    });
+    _orbitSphere = new THREE.Mesh(geo, mat);
+    _orbitSphere.visible = false;
+    scene.add(_orbitSphere);
+}
+
+function updateOrbitCenter(camera: THREE.PerspectiveCamera, controls: OrbitControls): void {
+    if (!_getMeshes) { return; }
+
+    _raycaster.setFromCamera(_screenCenter, camera);
+
+    const meshes = _getMeshes();
+    const hits = meshes.length > 0 ? _raycaster.intersectObjects(meshes, false) : [];
+
+    if (hits.length > 0) {
+        _orbitCenter.copy(hits[0].point);
+    } else {
+        // Fallback: intersect with Z=0 plane (printer bed)
+        if (_raycaster.ray.intersectPlane(_floorPlane, _planeHit)) {
+            _orbitCenter.copy(_planeHit);
+        } else {
+            _orbitCenter.copy(controls.target);
+        }
+    }
+
+    // Decompose camera position into orbit offset + pan accumulation
+    _orbitOffset.subVectors(camera.position, _orbitCenter);
+    _panAccum.set(0, 0, 0);
+    controls.target.copy(_orbitCenter);
+
+    if (_orbitSphere) {
+        _orbitSphere.position.copy(_orbitCenter);
+        _orbitSphere.visible = true;
+    }
+}
+
 // ---- Camera application ----
 // Called every frame from animate(). Applies SpaceMouse input to Three.js camera.
 //
@@ -92,7 +158,8 @@ function dz(v: number): number {
 
 export function applySpaceMouseToCamera(
     camera: THREE.PerspectiveCamera,
-    controls: OrbitControls
+    controls: OrbitControls,
+    delta: number  // frame interval in ms (for sphere hide timer)
 ): void {
     if (!state.connected) { return; }
 
@@ -102,37 +169,81 @@ export function applySpaceMouseToCamera(
     const rx = dz(state.rx) * SCALE_R;
     const rz = dz(state.rz) * SCALE_R;
 
-    if (tx === 0 && ty === 0 && tz === 0 && rx === 0 && rz === 0) { return; }
+    const isActive = tx !== 0 || ty !== 0 || tz !== 0 || rx !== 0 || rz !== 0;
 
-    // Camera-right: forward × up (then normalize)
+    if (!isActive) {
+        if (_orbitSphere && _orbitSphere.visible) {
+            _sphereHideTimer -= delta;
+            if (_sphereHideTimer <= 0) {
+                _orbitSphere.visible = false;
+            }
+        }
+        _wasActive = false;
+        return;
+    }
+
+    // On gesture start (idle → active): update orbit center via raycasting
+    if (!_wasActive) {
+        updateOrbitCenter(camera, controls);
+    }
+    _wasActive = true;
+    _sphereHideTimer = SPHERE_SHOW_MS;
+
+    // Distance-dependent speed scaling (Fusion-style: closer = slower)
+    const dist = camera.position.distanceTo(_orbitCenter);
+    const distScale = Math.max(0.05, dist / REF_DIST);
+
+    const scaledTx = tx * distScale;
+    const scaledTy = ty * distScale;
+    const scaledTz = tz * distScale;
+    // Rotation is blended: only partially scaled by distance for comfortable feel
+    const rotScale = 1.0 + (distScale - 1.0) * 0.4;
+    const scaledRx = rx * rotScale;
+    const scaledRz = rz * rotScale;
+
+    // _forward/_right are based on the quaternion set by controls.update() last frame
+    // (i.e., the direction the user currently sees)
     camera.getWorldDirection(_forward);
     _right.crossVectors(_forward, camera.up).normalize();
 
-    // 1. Pan: move camera and target together (preserves orbit center)
-    //    Tx → along camera-right; Tz → along world Z
-    camera.position.addScaledVector(_right, -tx);
-    controls.target.addScaledVector(_right, -tx);
-    camera.position.addScaledVector(_worldZ, tz);
-    controls.target.addScaledVector(_worldZ, tz);
-
-    // 2. Dolly: move camera along forward only (changes distance to target)
-    //    Ty positive = push away from screen → camera moves toward scene
-    camera.position.addScaledVector(_forward, ty);
-
-    // 3. Orbit: rotate offset vector around target
-    _offset.subVectors(camera.position, controls.target);
-
-    if (rx !== 0) {
-        _pitchQ.setFromAxisAngle(_right, -rx);
-        _offset.applyQuaternion(_pitchQ);
+    // 1. Orbit: rotate _orbitOffset only (pan is tracked separately in _panAccum)
+    if (scaledRx !== 0) {
+        _pitchQ.setFromAxisAngle(_right, -scaledRx);
+        _orbitOffset.applyQuaternion(_pitchQ);
     }
-    if (rz !== 0) {
-        _yawQ.setFromAxisAngle(_worldZ, rz);
-        _offset.applyQuaternion(_yawQ);
+    if (scaledRz !== 0) {
+        _yawQ.setFromAxisAngle(_worldZ, scaledRz);
+        _orbitOffset.applyQuaternion(_yawQ);
     }
 
-    camera.position.copy(controls.target).add(_offset);
-
-    // Re-assert Z-up after rotation to prevent OrbitControls drift
+    // Reconstruct camera position from components
+    camera.position.copy(_orbitCenter).add(_orbitOffset).add(_panAccum);
     camera.up.set(0, 0, 1);
+
+    // 2. Pan: move camera AND controls.target together by the same delta.
+    //    This keeps the camera-to-target offset intact so OrbitControls.update()
+    //    does NOT rotate the camera to look back at a fixed point.
+    camera.getWorldDirection(_forward);
+    _right.crossVectors(_forward, camera.up).normalize();
+
+    if (scaledTx !== 0) {
+        const d = -scaledTx;
+        camera.position.addScaledVector(_right, d);
+        controls.target.addScaledVector(_right, d);
+        _panAccum.addScaledVector(_right, d);
+    }
+    if (scaledTz !== 0) {
+        camera.position.addScaledVector(_worldZ, scaledTz);
+        controls.target.addScaledVector(_worldZ, scaledTz);
+        _panAccum.addScaledVector(_worldZ, scaledTz);
+    }
+
+    // 3. Dolly: move camera along forward; update _orbitOffset so rotation
+    //    stays consistent after zoom
+    if (scaledTy !== 0) {
+        camera.position.addScaledVector(_forward, scaledTy);
+        _orbitOffset.addScaledVector(_forward, scaledTy);
+    }
+
+    // Sphere stays fixed at _orbitCenter — no position update needed here
 }
