@@ -4,6 +4,8 @@ import { decode } from '@msgpack/msgpack';
 export interface PathData {
     path_lengths: number[];
     coords: Uint8Array;
+    travel_path_lengths?: number[];
+    travel_coords?: Uint8Array;
 }
 
 export type DataCallback = (data: PathData) => void;

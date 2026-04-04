@@ -53,10 +53,15 @@ export class PreviewPanel {
         // VSCode postMessage serializes via JSON, so TypedArrays must be encoded.
         // Encode the binary coord buffer as a base64 string.
         const coordsBase64 = Buffer.from(data.coords).toString('base64');
+        const travelCoordsBase64 = data.travel_coords
+            ? Buffer.from(data.travel_coords).toString('base64')
+            : '';
         this.panel.webview.postMessage({
             type: 'update',
             path_lengths: data.path_lengths,
             coords_b64: coordsBase64,
+            travel_path_lengths: data.travel_path_lengths ?? [],
+            travel_coords_b64: travelCoordsBase64,
         });
     }
 

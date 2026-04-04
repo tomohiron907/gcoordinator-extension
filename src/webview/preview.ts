@@ -75,6 +75,8 @@ let pathMeshes: THREE.Mesh[] = [];
 let travelLines: THREE.Line[] = [];
 let storedPathLengths: number[] = [];
 let storedLayerCoords: Float32Array[] = [];
+let storedTravelCoords: Float32Array[] = [];
+let storedTravelPathLengths: number[] = [];
 let currentTopIndex = -1;
 
 // ---- Vertical slider (layer range) ----
@@ -104,19 +106,27 @@ function applyVerticalSlider(): void {
         mesh.visible = i <= maxVisible;
     });
     travelLines.forEach((line, i) => {
-        line.visible = (i + 1) <= maxVisible;
+        const vis = (i + 1) <= maxVisible;
+        line.visible = vis;
+        if (vis) {
+            line.geometry.setDrawRange(0, Infinity); // fully drawn for past travels
+        } else {
+            line.geometry.setDrawRange(0, 0); // reset any partial draw
+        }
     });
 
     currentTopIndex = maxVisible;
 
-    // Sync horizontal slider to the new top layer
+    // Sync horizontal slider to the new top layer (including travel extension if present)
     const topLen = storedPathLengths[maxVisible];
+    const travelExtra = (storedTravelPathLengths[maxVisible] ?? 0) > 0
+        ? (storedTravelPathLengths[maxVisible] + 1) : 0;
+    const totalLen = topLen + travelExtra;
     hSlider.min   = '1';
-    hSlider.max   = String(topLen);
-    hSlider.value = String(topLen); // show full curve by default
-    hValLabel.textContent  = String(topLen);
-    hTotalLabel.textContent = String(topLen);
-    updateNozzle(maxVisible, topLen - 1);
+    hSlider.max   = String(totalLen);
+    hSlider.value = String(totalLen);
+    hTotalLabel.textContent = String(totalLen);
+    applyHorizontalSlider(); // sets hValLabel and nozzle based on current slider value
 }
 
 vSlider.addEventListener('input', applyVerticalSlider);
@@ -138,12 +148,40 @@ function dimLowerLayers(dim: boolean): void {
 function applyHorizontalSlider(): void {
     if (currentTopIndex < 0 || pathMeshes.length === 0) { return; }
     const pointCount = parseInt(hSlider.value, 10);
-    const maxPoints  = parseInt(hSlider.max,   10);
-    const indexCount = Math.max(0, pointCount - 1) * 24;
-    pathMeshes[currentTopIndex].geometry.setDrawRange(0, indexCount);
-    hValLabel.textContent = String(pointCount);
-    dimLowerLayers(pointCount < maxPoints);
-    updateNozzle(currentTopIndex, pointCount - 1);
+    const mainLen    = storedPathLengths[currentTopIndex];
+    const maxPoints  = parseInt(hSlider.max, 10);
+
+    if (pointCount <= mainLen) {
+        // ---- Main path phase ----
+        const indexCount = Math.max(0, pointCount - 1) * 24;
+        pathMeshes[currentTopIndex].geometry.setDrawRange(0, indexCount);
+        // Hide travel line for this path while still printing
+        const tl = travelLines[currentTopIndex];
+        if (tl) { tl.visible = false; tl.geometry.setDrawRange(0, 0); }
+        hValLabel.textContent = String(pointCount);
+        dimLowerLayers(pointCount < maxPoints);
+        updateNozzle(currentTopIndex, pointCount - 1);
+    } else {
+        // ---- Travel phase ----
+        // Show main path in full
+        pathMeshes[currentTopIndex].geometry.setDrawRange(0, (mainLen - 1) * 24);
+        // travelStep: 1-based index into travel pts array (pts[0] = end of main path)
+        const travelStep = pointCount - mainLen;
+        const tl   = travelLines[currentTopIndex];
+        const tPts = storedTravelCoords[currentTopIndex];
+        if (tl && tPts) {
+            tl.visible = true;
+            tl.geometry.setDrawRange(0, travelStep + 1); // show pts[0..travelStep]
+            nozzleMesh.position.set(
+                tPts[travelStep * 3],
+                tPts[travelStep * 3 + 1],
+                tPts[travelStep * 3 + 2] + NOZZLE_HEIGHT / 2
+            );
+            nozzleMesh.visible = true;
+        }
+        hValLabel.textContent = String(pointCount);
+        dimLowerLayers(true);
+    }
 }
 
 hSlider.addEventListener('input', applyHorizontalSlider);
@@ -260,6 +298,8 @@ interface UpdateMessage {
     type: 'update';
     path_lengths: number[];
     coords_b64: string;
+    travel_path_lengths: number[];
+    travel_coords_b64: string;
 }
 
 window.addEventListener('message', (event: MessageEvent) => {
@@ -280,10 +320,13 @@ window.addEventListener('message', (event: MessageEvent) => {
     });
     travelLines = [];
     storedLayerCoords = [];
+    storedTravelCoords = [];
 
-    const { path_lengths, coords_b64 } = msg;
+    const { path_lengths, coords_b64, travel_path_lengths, travel_coords_b64 } = msg;
+    storedTravelPathLengths = travel_path_lengths || [];
     storedPathLengths = path_lengths;
     const allCoords = b64ToFloat32Array(coords_b64);
+    const travelCoords = travel_coords_b64 ? b64ToFloat32Array(travel_coords_b64) : new Float32Array(0);
 
     // Z range for color mapping
     let zMin = Infinity, zMax = -Infinity;
@@ -311,24 +354,36 @@ window.addEventListener('message', (event: MessageEvent) => {
     }
 
     // Build travel lines between consecutive paths
+    let travelOffset = 0;
     for (let pi = 0; pi < path_lengths.length - 1; pi++) {
         const endCoords   = storedLayerCoords[pi];
         const startCoords = storedLayerCoords[pi + 1];
         const endLen = path_lengths[pi];
-        const pts = new Float32Array([
+        const wayCount = (travel_path_lengths && travel_path_lengths[pi]) ? travel_path_lengths[pi] : 0;
+
+        const pts: number[] = [
             endCoords[(endLen - 1) * 3],
             endCoords[(endLen - 1) * 3 + 1],
             endCoords[(endLen - 1) * 3 + 2],
-            startCoords[0],
-            startCoords[1],
-            startCoords[2],
-        ]);
+        ];
+        for (let wi = 0; wi < wayCount; wi++) {
+            pts.push(
+                travelCoords[(travelOffset + wi) * 3],
+                travelCoords[(travelOffset + wi) * 3 + 1],
+                travelCoords[(travelOffset + wi) * 3 + 2],
+            );
+        }
+        pts.push(startCoords[0], startCoords[1], startCoords[2]);
+
+        const ptsArray = new Float32Array(pts);
         const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+        geo.setAttribute('position', new THREE.BufferAttribute(ptsArray, 3));
         const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true });
         const line = new THREE.Line(geo, mat);
         scene.add(line);
         travelLines.push(line);
+        storedTravelCoords.push(ptsArray);
+        travelOffset += wayCount;
     }
 
     // Reset vertical slider
@@ -340,18 +395,24 @@ window.addEventListener('message', (event: MessageEvent) => {
     vValLabel.textContent  = String(total);
     currentTopIndex = total - 1;
 
-    // Reset horizontal slider for the top layer
+    // Reset horizontal slider for the top layer (including travel extension if present)
     const topLen = path_lengths[total - 1];
+    const initTravelExtra = (storedTravelPathLengths[total - 1] ?? 0) > 0
+        ? (storedTravelPathLengths[total - 1] + 1) : 0;
     hSlider.min   = '1';
-    hSlider.max   = String(topLen);
-    hSlider.value = String(topLen);
-    hValLabel.textContent  = String(topLen);
-    hTotalLabel.textContent = String(topLen);
+    hSlider.max   = String(topLen + initTravelExtra);
+    hSlider.value = String(topLen + initTravelExtra);
+    hTotalLabel.textContent = String(topLen + initTravelExtra);
 
-    // Apply both sliders
+    // Apply layer visibility
     pathMeshes.forEach((mesh, i) => { mesh.visible = i <= currentTopIndex; });
-    travelLines.forEach((line, i) => { line.visible = (i + 1) <= currentTopIndex; });
-    updateNozzle(total - 1, topLen - 1);
+    travelLines.forEach((line, i) => {
+        const vis = (i + 1) <= currentTopIndex;
+        line.visible = vis;
+        if (vis) { line.geometry.setDrawRange(0, Infinity); }
+        else      { line.geometry.setDrawRange(0, 0); }
+    });
+    applyHorizontalSlider(); // sets hValLabel and nozzle based on current slider value
 });
 
 // ---- Animation loop ----
