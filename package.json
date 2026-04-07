@@ -31,6 +31,21 @@
           "type": "number",
           "default": 5163,
           "description": "Port number for the gcoordinator preview server"
+        },
+        "gcoordinator.nozzleSize": {
+          "type": "number",
+          "default": 0.4,
+          "description": "Nozzle diameter in mm. Controls the cross-section width of the print path visualization (height = nozzleSize / 2)."
+        },
+        "gcoordinator.pathColor": {
+          "type": "string",
+          "default": "#ffffff",
+          "description": "Color of the print path (extrusion) visualization. CSS hex color string (e.g. \"#ff8800\")."
+        },
+        "gcoordinator.travelColor": {
+          "type": "string",
+          "default": "#ffffff",
+          "description": "Color of the travel move lines. CSS hex color string (e.g. \"#0088ff\")."
         }
       }
     }

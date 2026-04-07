@@ -95,6 +95,10 @@ export class GCodePreviewPanel {
 
     private postUpdate(result: GCodeParseResult, totalLines: number): void {
         if (this.disposed) { return; }
+        const config = vscode.workspace.getConfiguration('gcoordinator');
+        const nozzleSize: number  = config.get('nozzleSize', 0.4);
+        const pathColor: string   = config.get('pathColor', '#ffffff');
+        const travelColor: string = config.get('travelColor', '#ffffff');
 
         // Pack all segment coords into one large Float32Array
         let totalPoints = 0;
@@ -120,6 +124,9 @@ export class GCodePreviewPanel {
             segIdx_b64:   Buffer.from(segIdxArr.buffer).toString('base64'),
             ptIdx_b64:    Buffer.from(ptIdxArr.buffer).toString('base64'),
             totalLines,
+            nozzleSize,
+            pathColor,
+            travelColor,
         });
     }
 

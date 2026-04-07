@@ -77,7 +77,10 @@ const lineInfoEl = document.getElementById('line-info') as HTMLElement;
 const _Z_AXIS = new THREE.Vector3(0, 0, 1);
 const _X_AXIS = new THREE.Vector3(1, 0, 0);
 
-function buildDiamondTube(positions: Float32Array, N: number): THREE.BufferGeometry {
+function buildDiamondTube(positions: Float32Array, N: number, nozzleSize: number): THREE.BufferGeometry {
+    const halfWidth  = nozzleSize / 2;
+    const halfHeight = nozzleSize / 4;
+
     const posOut   = new Float32Array(12 * N);
     const indexOut = new Uint32Array((N - 1) * 24);
 
@@ -109,16 +112,16 @@ function buildDiamondTube(positions: Float32Array, N: number): THREE.BufferGeome
         const pz = positions[i * 3 + 2];
         const base = i * 12;
 
-        tmp.set(px, py, pz).addScaledVector(right, 0.2);
+        tmp.set(px, py, pz).addScaledVector(right, halfWidth);
         posOut[base]     = tmp.x; posOut[base + 1] = tmp.y; posOut[base + 2] = tmp.z;
 
-        tmp.set(px, py, pz).addScaledVector(up, 0.1);
+        tmp.set(px, py, pz).addScaledVector(up, halfHeight);
         posOut[base + 3] = tmp.x; posOut[base + 4] = tmp.y; posOut[base + 5] = tmp.z;
 
-        tmp.set(px, py, pz).addScaledVector(right, -0.2);
+        tmp.set(px, py, pz).addScaledVector(right, -halfWidth);
         posOut[base + 6] = tmp.x; posOut[base + 7] = tmp.y; posOut[base + 8] = tmp.z;
 
-        tmp.set(px, py, pz).addScaledVector(up, -0.1);
+        tmp.set(px, py, pz).addScaledVector(up, -halfHeight);
         posOut[base + 9]  = tmp.x; posOut[base + 10] = tmp.y; posOut[base + 11] = tmp.z;
     }
 
@@ -176,6 +179,8 @@ let allCoords: Float32Array = new Float32Array(0);
 let lineIdxSeg: Uint32Array = new Uint32Array(0);
 let lineIdxPt:  Uint32Array = new Uint32Array(0);
 let storedTotalLines = 0;
+let currentPathColor   = '#ffffff';
+let currentTravelColor = '#ffffff';
 
 // ---- Message handler ----
 
@@ -186,6 +191,9 @@ interface GCodeUpdateMsg {
     segIdx_b64: string;
     ptIdx_b64: string;
     totalLines: number;
+    nozzleSize?: number;
+    pathColor?: string;
+    travelColor?: string;
 }
 
 interface GCodeSeekMsg {
@@ -221,6 +229,9 @@ window.addEventListener('message', (event: MessageEvent) => {
         lineIdxSeg    = b64ToUint32Array(msg.segIdx_b64);
         lineIdxPt     = b64ToUint32Array(msg.ptIdx_b64);
         storedTotalLines = msg.totalLines;
+        const nozzleSize = msg.nozzleSize ?? 0.4;
+        currentPathColor   = msg.pathColor   ?? '#ffffff';
+        currentTravelColor = msg.travelColor ?? '#ffffff';
 
         // Build Three.js objects for each segment — all start hidden
         for (const seg of segmentMetas) {
@@ -228,10 +239,10 @@ window.addEventListener('message', (event: MessageEvent) => {
 
             if (!seg.isTravel) {
                 // Extrusion: diamond tube mesh
-                const geo = buildDiamondTube(coords, seg.pointCount);
+                const geo = buildDiamondTube(coords, seg.pointCount, nozzleSize);
                 geo.setDrawRange(0, 0);
                 const mat = new THREE.MeshPhongMaterial({
-                    color: 0xffffff,
+                    color: new THREE.Color(currentPathColor),
                     side: THREE.FrontSide,
                     flatShading: true,
                     shininess: 60,
@@ -246,7 +257,7 @@ window.addEventListener('message', (event: MessageEvent) => {
                 geo.setAttribute('position', new THREE.BufferAttribute(coords.slice(), 3));
                 geo.setDrawRange(0, 0);
                 const mat = new THREE.LineBasicMaterial({
-                    color: 0xffffff,
+                    color: new THREE.Color(currentTravelColor),
                     opacity: 0.15,
                     transparent: true,
                 });
@@ -272,7 +283,8 @@ function applyShowAll(): void {
         const N = meta.pointCount;
         obj.visible = true;
         obj.geometry.setDrawRange(0, meta.isTravel ? N : (N - 1) * 24);
-        (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.setHex(0xffffff);
+        const color = meta.isTravel ? currentTravelColor : currentPathColor;
+        (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.set(color);
     }
     lineInfoEl.textContent = '';
 }
@@ -305,10 +317,13 @@ function applySeek(segIdx: number, pointIdx: number, lineNum: number, totalLines
             // Dim segments below the current layer
             const segZ = allCoords[meta.floatOffset + 2];
             const dim = segZ < currentZ - 0.001;
-            (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.setHex(dim ? 0x555555 : 0xffffff);
+            const baseColor = meta.isTravel ? currentTravelColor : currentPathColor;
+            const c = dim ? new THREE.Color(baseColor).multiplyScalar(1 / 3) : new THREE.Color(baseColor);
+            (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.set(c);
         } else if (i === si) {
             // Current segment: always bright
-            (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.setHex(0xffffff);
+            const segColor = meta.isTravel ? currentTravelColor : currentPathColor;
+            (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.set(segColor);
             // Partial: show up to pointIdx
             const pi = Math.min(pointIdx, N - 1);
             if (pi <= 0) {

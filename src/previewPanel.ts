@@ -56,12 +56,19 @@ export class PreviewPanel {
         const travelCoordsBase64 = data.travel_coords
             ? Buffer.from(data.travel_coords).toString('base64')
             : '';
+        const config = vscode.workspace.getConfiguration('gcoordinator');
+        const nozzleSize: number = config.get('nozzleSize', 0.4);
+        const pathColor: string  = config.get('pathColor', '#ffffff');
+        const travelColor: string = config.get('travelColor', '#ffffff');
         this.panel.webview.postMessage({
             type: 'update',
             path_lengths: data.path_lengths,
             coords_b64: coordsBase64,
             travel_path_lengths: data.travel_path_lengths ?? [],
             travel_coords_b64: travelCoordsBase64,
+            nozzleSize,
+            pathColor,
+            travelColor,
         });
     }
 

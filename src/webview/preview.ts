@@ -221,7 +221,10 @@ function valueToColor(t: number): THREE.Color {
 const _Z_AXIS = new THREE.Vector3(0, 0, 1);
 const _X_AXIS = new THREE.Vector3(1, 0, 0);
 
-function buildDiamondTube(positions: Float32Array, N: number): THREE.BufferGeometry {
+function buildDiamondTube(positions: Float32Array, N: number, nozzleSize: number): THREE.BufferGeometry {
+    const halfWidth  = nozzleSize / 2;
+    const halfHeight = nozzleSize / 4;
+
     const posOut   = new Float32Array(12 * N);
     const indexOut = new Uint32Array((N - 1) * 24);
 
@@ -254,20 +257,20 @@ function buildDiamondTube(positions: Float32Array, N: number): THREE.BufferGeome
         const pz = positions[i * 3 + 2];
         const base = i * 12;
 
-        // right tip (+0.2 * right)
-        tmp.set(px, py, pz).addScaledVector(right, 0.2);
+        // right tip
+        tmp.set(px, py, pz).addScaledVector(right, halfWidth);
         posOut[base]     = tmp.x; posOut[base + 1] = tmp.y; posOut[base + 2] = tmp.z;
 
-        // top tip (+0.1 * up)
-        tmp.set(px, py, pz).addScaledVector(up, 0.1);
+        // top tip
+        tmp.set(px, py, pz).addScaledVector(up, halfHeight);
         posOut[base + 3] = tmp.x; posOut[base + 4] = tmp.y; posOut[base + 5] = tmp.z;
 
-        // left tip (-0.2 * right)
-        tmp.set(px, py, pz).addScaledVector(right, -0.2);
+        // left tip
+        tmp.set(px, py, pz).addScaledVector(right, -halfWidth);
         posOut[base + 6] = tmp.x; posOut[base + 7] = tmp.y; posOut[base + 8] = tmp.z;
 
-        // bottom tip (-0.1 * up)
-        tmp.set(px, py, pz).addScaledVector(up, -0.1);
+        // bottom tip
+        tmp.set(px, py, pz).addScaledVector(up, -halfHeight);
         posOut[base + 9]  = tmp.x; posOut[base + 10] = tmp.y; posOut[base + 11] = tmp.z;
     }
 
@@ -300,6 +303,9 @@ interface UpdateMessage {
     coords_b64: string;
     travel_path_lengths: number[];
     travel_coords_b64: string;
+    nozzleSize?: number;
+    pathColor?: string;
+    travelColor?: string;
 }
 
 window.addEventListener('message', (event: MessageEvent) => {
@@ -322,7 +328,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     storedLayerCoords = [];
     storedTravelCoords = [];
 
-    const { path_lengths, coords_b64, travel_path_lengths, travel_coords_b64 } = msg;
+    const { path_lengths, coords_b64, travel_path_lengths, travel_coords_b64, nozzleSize = 0.4, pathColor = '#ffffff', travelColor = '#ffffff' } = msg;
     storedTravelPathLengths = travel_path_lengths || [];
     storedPathLengths = path_lengths;
     const allCoords = b64ToFloat32Array(coords_b64);
@@ -344,8 +350,8 @@ window.addEventListener('message', (event: MessageEvent) => {
 
         let zSum = 0;
         for (let i = 2; i < positions.length; i += 3) { zSum += positions[i]; }
-        const geometry = buildDiamondTube(positions, len);
-        const material = new THREE.MeshPhongMaterial({ color: 0xffffff, side: THREE.FrontSide, flatShading: true, shininess: 60 });
+        const geometry = buildDiamondTube(positions, len, nozzleSize);
+        const material = new THREE.MeshPhongMaterial({ color: new THREE.Color(pathColor), side: THREE.FrontSide, flatShading: true, shininess: 60 });
         const mesh = new THREE.Mesh(geometry, material);
         scene.add(mesh);
         pathMeshes.push(mesh);
@@ -378,7 +384,7 @@ window.addEventListener('message', (event: MessageEvent) => {
         const ptsArray = new Float32Array(pts);
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.BufferAttribute(ptsArray, 3));
-        const mat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.1, transparent: true });
+        const mat = new THREE.LineBasicMaterial({ color: new THREE.Color(travelColor), opacity: 0.1, transparent: true });
         const line = new THREE.Line(geo, mat);
         scene.add(line);
         travelLines.push(line);
