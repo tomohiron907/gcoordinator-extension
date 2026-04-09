@@ -308,8 +308,17 @@ interface UpdateMessage {
     travelColor?: string;
 }
 
+const computingOverlay = document.getElementById('computing-overlay');
+
 window.addEventListener('message', (event: MessageEvent) => {
     const msg = event.data as UpdateMessage;
+
+    if (msg.type === 'computing') {
+        const computing = (event.data as { type: string; computing: boolean }).computing;
+        computingOverlay?.classList.toggle('visible', computing);
+        return;
+    }
+
     if (msg.type !== 'update') { return; }
 
     // Clear old meshes

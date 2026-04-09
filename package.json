@@ -16,12 +16,16 @@
   "contributes": {
     "commands": [
       {
-        "command": "gcoordinator.openPreview",
-        "title": "gcoordinator: Open 3D Preview"
-      },
-      {
         "command": "gcoordinator.previewGCode",
         "title": "gcoordinator: Preview G-code"
+      },
+      {
+        "command": "gcoordinator.startPreview",
+        "title": "gcoordinator: Start Preview"
+      },
+      {
+        "command": "gcoordinator.stopPreview",
+        "title": "gcoordinator: Stop Preview"
       }
     ],
     "configuration": {
@@ -46,6 +50,16 @@
           "type": "string",
           "default": "#ffffff",
           "description": "Color of the travel move lines. CSS hex color string (e.g. \"#0088ff\")."
+        },
+        "gcoordinator.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Python interpreter used for Live Preview. Leave empty to auto-detect (tries ms-python extension, then 'python3', then 'python')."
+        },
+        "gcoordinator.livePreviewTimeout": {
+          "type": "number",
+          "default": 30,
+          "description": "Maximum time in seconds to allow a Python script to run during Live Preview before killing it."
         }
       }
     }

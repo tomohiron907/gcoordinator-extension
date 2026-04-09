@@ -49,6 +49,10 @@ export class PreviewPanel {
         this.panel.webview.postMessage(state);
     }
 
+    postComputing(computing: boolean): void {
+        this.panel.webview.postMessage({ type: 'computing', computing });
+    }
+
     postData(data: PathData): void {
         // VSCode postMessage serializes via JSON, so TypedArrays must be encoded.
         // Encode the binary coord buffer as a base64 string.
@@ -95,7 +99,14 @@ export class PreviewPanel {
 </head>
 <body>
   <div id="main">
-    <div id="canvas-container"></div>
+    <div id="canvas-container">
+      <div id="computing-overlay">
+        <div id="computing-badge">
+          <div class="computing-spinner"></div>
+          Computing...
+        </div>
+      </div>
+    </div>
     <div id="hslider-panel">
       <span id="curve-val">0</span>
       <input type="range" id="curve-slider" min="1" max="1" value="1">
