@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { initSpaceMouse, applySpaceMouseToCamera, setupSpaceMouseScene } from './spacemouse';
 
 // ---- Scene setup ----
@@ -72,7 +75,8 @@ scene.add(nozzleMesh);
 // ---- State ----
 
 let pathMeshes: THREE.Mesh[] = [];
-let travelLines: THREE.Line[] = [];
+let travelLines: Line2[] = [];
+let travelLineMaterials: LineMaterial[] = [];
 let storedPathLengths: number[] = [];
 let storedLayerCoords: Float32Array[] = [];
 let storedTravelCoords: Float32Array[] = [];
@@ -109,9 +113,9 @@ function applyVerticalSlider(): void {
         const vis = (i + 1) <= maxVisible;
         line.visible = vis;
         if (vis) {
-            line.geometry.setDrawRange(0, Infinity); // fully drawn for past travels
+            (line.geometry as LineGeometry).instanceCount = Infinity; // fully drawn for past travels
         } else {
-            line.geometry.setDrawRange(0, 0); // reset any partial draw
+            (line.geometry as LineGeometry).instanceCount = 0; // reset any partial draw
         }
     });
 
@@ -157,7 +161,7 @@ function applyHorizontalSlider(): void {
         pathMeshes[currentTopIndex].geometry.setDrawRange(0, indexCount);
         // Hide travel line for this path while still printing
         const tl = travelLines[currentTopIndex];
-        if (tl) { tl.visible = false; tl.geometry.setDrawRange(0, 0); }
+        if (tl) { tl.visible = false; (tl.geometry as LineGeometry).instanceCount = 0; }
         hValLabel.textContent = String(pointCount);
         dimLowerLayers(pointCount < maxPoints);
         updateNozzle(currentTopIndex, pointCount - 1);
@@ -171,7 +175,7 @@ function applyHorizontalSlider(): void {
         const tPts = storedTravelCoords[currentTopIndex];
         if (tl && tPts) {
             tl.visible = true;
-            tl.geometry.setDrawRange(0, travelStep + 1); // show pts[0..travelStep]
+            (tl.geometry as LineGeometry).instanceCount = travelStep; // show pts[0..travelStep] = travelStep segments
             nozzleMesh.position.set(
                 tPts[travelStep * 3],
                 tPts[travelStep * 3 + 1],
@@ -334,6 +338,7 @@ window.addEventListener('message', (event: MessageEvent) => {
         (line.material as THREE.Material).dispose();
     });
     travelLines = [];
+    travelLineMaterials = [];
     storedLayerCoords = [];
     storedTravelCoords = [];
 
@@ -391,12 +396,19 @@ window.addEventListener('message', (event: MessageEvent) => {
         pts.push(startCoords[0], startCoords[1], startCoords[2]);
 
         const ptsArray = new Float32Array(pts);
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(ptsArray, 3));
-        const mat = new THREE.LineBasicMaterial({ color: new THREE.Color(travelColor), opacity: 0.1, transparent: true });
-        const line = new THREE.Line(geo, mat);
+        const geo = new LineGeometry();
+        geo.setPositions(pts);
+        const mat = new LineMaterial({
+            color: new THREE.Color(travelColor).getHex(),
+            linewidth: 2,
+            opacity: 0.1,
+            transparent: true,
+            resolution: new THREE.Vector2(container.clientWidth, container.clientHeight),
+        });
+        const line = new Line2(geo, mat);
         scene.add(line);
         travelLines.push(line);
+        travelLineMaterials.push(mat);
         storedTravelCoords.push(ptsArray);
         travelOffset += wayCount;
     }
@@ -453,4 +465,5 @@ window.addEventListener('resize', () => {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    travelLineMaterials.forEach(mat => mat.resolution.set(w, h));
 });
