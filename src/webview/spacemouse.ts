@@ -192,12 +192,17 @@ function dz(v: number): number {
     return Math.abs(v) < DEADZONE ? 0 : v;
 }
 
+/**
+ * Returns true when this call changed something visible, so the caller can
+ * request a redraw. Camera moves are also picked up by OrbitControls' 'change'
+ * event, but the orbit sphere hiding while the camera sits still is not.
+ */
 export function applySpaceMouseToCamera(
     camera: THREE.PerspectiveCamera,
     controls: OrbitControls,
     delta: number  // frame interval in ms (for sphere hide timer)
-): void {
-    if (!state.connected) { return; }
+): boolean {
+    if (!state.connected) { return false; }
 
     const tx = dz(state.tx) * SCALE_PAN_LR;
     const ty = dz(state.ty) * SCALE_DOLLY;
@@ -208,14 +213,16 @@ export function applySpaceMouseToCamera(
     const isActive = tx !== 0 || ty !== 0 || tz !== 0 || rx !== 0 || rz !== 0;
 
     if (!isActive) {
+        let changed = false;
         if (_orbitSphere && _orbitSphere.visible) {
             _sphereHideTimer -= delta;
             if (_sphereHideTimer <= 0) {
                 _orbitSphere.visible = false;
+                changed = true;  // camera is still, so no 'change' event fires
             }
         }
         _wasActive = false;
-        return;
+        return changed;
     }
 
     // On gesture start (idle → active): update orbit center via raycasting
@@ -319,4 +326,5 @@ export function applySpaceMouseToCamera(
     }
 
     // Sphere stays fixed at _orbitCenter — no position update needed here
+    return true;
 }

@@ -20977,7 +20977,7 @@
   }
   function applySpaceMouseToCamera(camera2, controls2, delta) {
     if (!state.connected) {
-      return;
+      return false;
     }
     const tx = dz(state.tx) * SCALE_PAN_LR;
     const ty = dz(state.ty) * SCALE_DOLLY;
@@ -20986,14 +20986,16 @@
     const rz = dz(state.rz) * SCALE_YAW;
     const isActive = tx !== 0 || ty !== 0 || tz !== 0 || rx !== 0 || rz !== 0;
     if (!isActive) {
+      let changed = false;
       if (_orbitSphere && _orbitSphere.visible) {
         _sphereHideTimer -= delta;
         if (_sphereHideTimer <= 0) {
           _orbitSphere.visible = false;
+          changed = true;
         }
       }
       _wasActive = false;
-      return;
+      return changed;
     }
     if (!_wasActive) {
       updateOrbitCenter(camera2, controls2);
@@ -21071,6 +21073,7 @@
       camera2.position.addScaledVector(_forward, scaledTy);
       _orbitOffset.addScaledVector(_forward, scaledTy);
     }
+    return true;
   }
 
   // src/webview/gcodePreview.ts
@@ -21095,6 +21098,11 @@
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.target.set(100, 100, 0);
+  var needsRender = true;
+  function scheduleRender() {
+    needsRender = true;
+  }
+  controls.addEventListener("change", scheduleRender);
   initSpaceMouse();
   setupSpaceMouseScene(scene, () => objects.filter((o) => o instanceof Mesh && o.visible));
   var grid = new GridHelper(200, 20, 5592405, 3355443);
@@ -21272,6 +21280,7 @@
           objects.push(line);
         }
       }
+      scheduleRender();
     } else if (msg.type === "gcode-seek") {
       applySeek(msg.segIdx, msg.pointIdx, msg.lineNum, msg.totalLines);
     } else if (msg.type === "gcode-show-all") {
@@ -21290,6 +21299,7 @@
       obj.material.color.set(color);
     }
     lineInfoEl.textContent = "";
+    scheduleRender();
   }
   function applySeek(segIdx, pointIdx, lineNum, totalLines) {
     const count = objects.length;
@@ -21342,6 +21352,7 @@
       }
     }
     lineInfoEl.textContent = `Line ${lineNum + 1} / ${totalLines}`;
+    scheduleRender();
   }
   var _lastFrameTime = performance.now();
   function animate() {
@@ -21349,9 +21360,14 @@
     const now = performance.now();
     const delta = now - _lastFrameTime;
     _lastFrameTime = now;
-    applySpaceMouseToCamera(camera, controls, delta);
+    if (applySpaceMouseToCamera(camera, controls, delta)) {
+      scheduleRender();
+    }
     controls.update();
-    renderer.render(scene, camera);
+    if (needsRender) {
+      renderer.render(scene, camera);
+      needsRender = false;
+    }
   }
   animate();
   window.addEventListener("resize", () => {
@@ -21360,6 +21376,7 @@
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    scheduleRender();
   });
 })();
 /*! Bundled license information:

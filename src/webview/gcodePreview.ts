@@ -30,6 +30,13 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.target.set(100, 100, 0);
 
+// ---- Render on demand ----
+let needsRender = true;
+function scheduleRender(): void { needsRender = true; }
+
+// Fires on every camera change (including during damping), so damping frames are covered.
+controls.addEventListener('change', scheduleRender);
+
 initSpaceMouse();
 setupSpaceMouseScene(scene, () => objects.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh && o.visible));
 
@@ -267,6 +274,7 @@ window.addEventListener('message', (event: MessageEvent) => {
                 objects.push(line);
             }
         }
+        scheduleRender();
 
     } else if (msg.type === 'gcode-seek') {
         applySeek(msg.segIdx, msg.pointIdx, msg.lineNum, msg.totalLines);
@@ -287,6 +295,7 @@ function applyShowAll(): void {
         (obj.material as THREE.MeshPhongMaterial | THREE.LineBasicMaterial).color.set(color);
     }
     lineInfoEl.textContent = '';
+    scheduleRender();
 }
 
 function applySeek(segIdx: number, pointIdx: number, lineNum: number, totalLines: number): void {
@@ -351,6 +360,7 @@ function applySeek(segIdx: number, pointIdx: number, lineNum: number, totalLines
     }
 
     lineInfoEl.textContent = `Line ${lineNum + 1} / ${totalLines}`;
+    scheduleRender();
 }
 
 // ---- Animation loop ----
@@ -362,9 +372,14 @@ function animate(): void {
     const now = performance.now();
     const delta = now - _lastFrameTime;
     _lastFrameTime = now;
-    applySpaceMouseToCamera(camera, controls, delta);
-    controls.update();
-    renderer.render(scene, camera);
+    // The SpaceMouse can change the scene without moving the camera (hiding the
+    // orbit sphere), which no 'change' event would report.
+    if (applySpaceMouseToCamera(camera, controls, delta)) { scheduleRender(); }
+    controls.update(); // fires 'change' events during damping, keeping needsRender true
+    if (needsRender) {
+        renderer.render(scene, camera);
+        needsRender = false;
+    }
 }
 animate();
 
@@ -376,4 +391,5 @@ window.addEventListener('resize', () => {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    scheduleRender();
 });

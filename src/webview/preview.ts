@@ -33,6 +33,13 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.target.set(0, 0, 0);
 
+// ---- Render on demand ----
+let needsRender = true;
+function scheduleRender(): void { needsRender = true; }
+
+// Fires on every camera change (including during damping), so damping frames are covered.
+controls.addEventListener('change', scheduleRender);
+
 initSpaceMouse();
 setupSpaceMouseScene(scene, () => pathMeshes.filter(m => m.visible));
 
@@ -131,6 +138,7 @@ function applyVerticalSlider(): void {
     hSlider.value = String(totalLen);
     hTotalLabel.textContent = String(totalLen);
     applyHorizontalSlider(); // sets hValLabel and nozzle based on current slider value
+    scheduleRender();
 }
 
 vSlider.addEventListener('input', applyVerticalSlider);
@@ -186,6 +194,7 @@ function applyHorizontalSlider(): void {
         hValLabel.textContent = String(pointCount);
         dimLowerLayers(true);
     }
+    scheduleRender();
 }
 
 hSlider.addEventListener('input', applyHorizontalSlider);
@@ -440,6 +449,7 @@ window.addEventListener('message', (event: MessageEvent) => {
         else      { line.geometry.setDrawRange(0, 0); }
     });
     applyHorizontalSlider(); // sets hValLabel and nozzle based on current slider value
+    scheduleRender();
 });
 
 // ---- Animation loop ----
@@ -451,9 +461,14 @@ function animate(): void {
     const now = performance.now();
     const delta = now - _lastFrameTime;
     _lastFrameTime = now;
-    applySpaceMouseToCamera(camera, controls, delta);
-    controls.update();
-    renderer.render(scene, camera);
+    // The SpaceMouse can change the scene without moving the camera (hiding the
+    // orbit sphere), which no 'change' event would report.
+    if (applySpaceMouseToCamera(camera, controls, delta)) { scheduleRender(); }
+    controls.update(); // fires 'change' events during damping, keeping needsRender true
+    if (needsRender) {
+        renderer.render(scene, camera);
+        needsRender = false;
+    }
 }
 animate();
 
@@ -466,4 +481,5 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     travelLineMaterials.forEach(mat => mat.resolution.set(w, h));
+    scheduleRender();
 });
