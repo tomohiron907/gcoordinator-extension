@@ -55,8 +55,8 @@ export class SpaceMouseGate {
     }
 
     private postZero(state: SpaceMouseState): void {
-        // Connection changes still have to reach the webview so the status
-        // overlay stays accurate while input is suppressed.
+        // Connection changes still have to reach the webview so its connection
+        // toast fires even while input is suppressed.
         const key = `${state.connected}:${state.deviceName}`;
         if (this.zeroedKey === key) { return; }
         this.zeroedKey = key;

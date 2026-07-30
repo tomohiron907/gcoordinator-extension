@@ -199,14 +199,7 @@ export class GCodePreviewPanel {
     <div id="canvas-container"></div>
     <div id="line-info">Line 0</div>
   </div>
-  <div id="spacemouse-overlay">
-    <div id="sm-status">SpaceMouse: starting...</div>
-    <table>
-      <tr><td>Tx</td><td id="sm-tx">0</td><td>Rx</td><td id="sm-rx">0</td></tr>
-      <tr><td>Ty</td><td id="sm-ty">0</td><td>Ry</td><td id="sm-ry">0</td></tr>
-      <tr><td>Tz</td><td id="sm-tz">0</td><td>Rz</td><td id="sm-rz">0</td></tr>
-    </table>
-  </div>
+  <div id="sm-toast"></div>
   <script src="${scriptUri}"></script>
 </body>
 </html>`;

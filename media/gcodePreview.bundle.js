@@ -20844,6 +20844,7 @@
   var SCALE_PITCH = 3e-4;
   var REF_DIST = 150;
   var SPHERE_SHOW_MS = 1500;
+  var TOAST_MS = 3e3;
   var state = {
     type: "spacemouse",
     tx: 0,
@@ -20855,28 +20856,37 @@
     connected: false,
     deviceName: ""
   };
-  var statusEl = null;
-  function updateOverlay() {
-    const ids = ["sm-tx", "sm-ty", "sm-tz", "sm-rx", "sm-ry", "sm-rz"];
-    const vals = [state.tx, state.ty, state.tz, state.rx, state.ry, state.rz];
-    ids.forEach((id, i) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.textContent = String(vals[i]);
-      }
-    });
-    if (statusEl) {
-      if (state.connected) {
-        statusEl.textContent = `SpaceMouse: ${state.deviceName}`;
-        statusEl.style.color = "#6bff6b";
-      } else {
-        statusEl.textContent = "SpaceMouse: searching...";
-        statusEl.style.color = "#ffaa44";
-      }
+  var toastEl = null;
+  var toastTimer = 0;
+  var lastConnected;
+  function showToast(text, ok) {
+    if (!toastEl) {
+      return;
     }
+    toastEl.textContent = text;
+    toastEl.classList.toggle("sm-toast-ok", ok);
+    toastEl.classList.add("sm-toast-visible");
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+    }
+    toastTimer = window.setTimeout(() => {
+      toastEl?.classList.remove("sm-toast-visible");
+      toastTimer = 0;
+    }, TOAST_MS);
+  }
+  function onConnectionChange() {
+    if (state.connected === lastConnected) {
+      return;
+    }
+    if (state.connected) {
+      showToast(`SpaceMouse connected: ${state.deviceName}`, true);
+    } else if (lastConnected !== void 0) {
+      showToast("SpaceMouse disconnected", false);
+    }
+    lastConnected = state.connected;
   }
   function initSpaceMouse() {
-    statusEl = document.getElementById("sm-status");
+    toastEl = document.getElementById("sm-toast");
     window.addEventListener("message", (event) => {
       const msg = event.data;
       if (msg.type !== "spacemouse") {
@@ -20890,9 +20900,8 @@
       state.rz = msg.rz;
       state.connected = msg.connected;
       state.deviceName = msg.deviceName;
-      updateOverlay();
+      onConnectionChange();
     });
-    updateOverlay();
   }
   var _raycaster = new Raycaster();
   var _screenCenter = new Vector2(0, 0);

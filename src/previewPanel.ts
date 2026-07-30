@@ -128,14 +128,7 @@ export class PreviewPanel {
     <input type="range" id="layer-slider" min="0" max="0" value="0">
     <span id="layer-val">0</span>
   </div>
-  <div id="spacemouse-overlay">
-    <div id="sm-status">SpaceMouse: starting...</div>
-    <table>
-      <tr><td>Tx</td><td id="sm-tx">0</td><td>Rx</td><td id="sm-rx">0</td></tr>
-      <tr><td>Ty</td><td id="sm-ty">0</td><td>Ry</td><td id="sm-ry">0</td></tr>
-      <tr><td>Tz</td><td id="sm-tz">0</td><td>Rz</td><td id="sm-rz">0</td></tr>
-    </table>
-  </div>
+  <div id="sm-toast"></div>
   <script src="${scriptUri}"></script>
 </body>
 </html>`;

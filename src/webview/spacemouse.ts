@@ -15,6 +15,7 @@ const SCALE_PITCH    = 0.0003; // 見下ろし / 俯仰回転 (Rx)
 
 const REF_DIST     = 150;  // reference camera distance for speed scaling
 const SPHERE_SHOW_MS = 1500; // ms after input stops before hiding orbit indicator
+const TOAST_MS       = 3000; // ms the connection toast stays on screen
 
 // ---- State (updated by postMessage from extension host) ----
 
@@ -34,32 +35,43 @@ const state: SpaceMouseState = {
     deviceName: '',
 };
 
-// ---- DOM references (set in initSpaceMouse) ----
+// ---- Connection toast ----
+// The axes are not shown at all: the puck's own motion is the feedback. Only a
+// change in connection state is worth a message, and only briefly.
 
-let statusEl: HTMLElement | null = null;
+let toastEl: HTMLElement | null = null;
+let toastTimer = 0;
+/** Last connection state announced; undefined until the first report arrives. */
+let lastConnected: boolean | undefined;
 
-function updateOverlay(): void {
-    const ids = ['sm-tx', 'sm-ty', 'sm-tz', 'sm-rx', 'sm-ry', 'sm-rz'] as const;
-    const vals = [state.tx, state.ty, state.tz, state.rx, state.ry, state.rz];
-    ids.forEach((id, i) => {
-        const el = document.getElementById(id);
-        if (el) { el.textContent = String(vals[i]); }
-    });
-    if (statusEl) {
-        if (state.connected) {
-            statusEl.textContent = `SpaceMouse: ${state.deviceName}`;
-            statusEl.style.color = '#6bff6b';
-        } else {
-            statusEl.textContent = 'SpaceMouse: searching...';
-            statusEl.style.color = '#ffaa44';
-        }
+function showToast(text: string, ok: boolean): void {
+    if (!toastEl) { return; }
+    toastEl.textContent = text;
+    toastEl.classList.toggle('sm-toast-ok', ok);
+    toastEl.classList.add('sm-toast-visible');
+    if (toastTimer) { clearTimeout(toastTimer); }
+    toastTimer = window.setTimeout(() => {
+        toastEl?.classList.remove('sm-toast-visible');
+        toastTimer = 0;
+    }, TOAST_MS);
+}
+
+function onConnectionChange(): void {
+    if (state.connected === lastConnected) { return; }
+    if (state.connected) {
+        showToast(`SpaceMouse connected: ${state.deviceName}`, true);
+    } else if (lastConnected !== undefined) {
+        // Startup without a puck is reported by the extension host instead, so
+        // only an actual loss of a working device is announced here.
+        showToast('SpaceMouse disconnected', false);
     }
+    lastConnected = state.connected;
 }
 
 // ---- Public init ----
 
 export function initSpaceMouse(): void {
-    statusEl = document.getElementById('sm-status');
+    toastEl = document.getElementById('sm-toast');
 
     // Receive SpaceMouse data forwarded from extension host via postMessage
     window.addEventListener('message', (event: MessageEvent) => {
@@ -70,10 +82,8 @@ export function initSpaceMouse(): void {
         state.rx = msg.rx; state.ry = msg.ry; state.rz = msg.rz;
         state.connected  = msg.connected;
         state.deviceName = msg.deviceName;
-        updateOverlay();
+        onConnectionChange();
     });
-
-    updateOverlay();
 }
 
 // ---- Scene context for raycasting (set via setupSpaceMouseScene) ----
