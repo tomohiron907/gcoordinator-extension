@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import { parseGCode, GCodeParseResult } from './gcodeParser';
 import { SpaceMouseState } from './spacemouseHost';
+import { SpaceMouseGate } from './spacemouseGate';
 
 export class GCodePreviewPanel {
     static instance: GCodePreviewPanel | undefined;
 
     private readonly panel: vscode.WebviewPanel;
     private readonly extensionUri: vscode.Uri;
+    private readonly spaceMouseGate: SpaceMouseGate;
     private document: vscode.TextDocument | undefined;
     private parseResult: GCodeParseResult | undefined;
     private selectionDisposable: vscode.Disposable | undefined;
@@ -31,8 +33,10 @@ export class GCodePreviewPanel {
             }
         );
         this.panel.webview.html = this.buildHtml();
+        this.spaceMouseGate = new SpaceMouseGate(this.panel);
         this.panel.onDidDispose(() => {
             this.disposed = true;
+            this.spaceMouseGate.dispose();
             this.selectionDisposable?.dispose();
             if (this.seekTimer) { clearTimeout(this.seekTimer); }
             GCodePreviewPanel.instance = undefined;
@@ -90,7 +94,7 @@ export class GCodePreviewPanel {
 
     postSpaceMouse(state: SpaceMouseState): void {
         if (this.disposed) { return; }
-        this.panel.webview.postMessage(state);
+        this.spaceMouseGate.post(state);
     }
 
     private postUpdate(result: GCodeParseResult, totalLines: number): void {

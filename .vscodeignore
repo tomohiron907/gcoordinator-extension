@@ -1,0 +1,29 @@
+# What ships in the vsix: out/, media/, bin/spacemoused, and the one dependency
+# that cannot be bundled (node-hid, a native module). Everything else is either
+# a build input or already inlined into out/extension.js by esbuild.
+#
+# Note that vsce lets a `!` pattern win over any ignore pattern regardless of
+# order, so the re-includes below have to name exact paths rather than undoing a
+# broader ignore.
+
+.vscode/**
+.gitignore
+src/**
+native/**
+tsconfig.json
+**/*.map
+**/*.pdf
+
+node_modules/**
+
+# node-hid resolves its prebuilt binding through pkg-prebuilds at runtime, so
+# both packages have to be present.
+!node_modules/pkg-prebuilds/**
+!node_modules/node-hid/*.js
+!node_modules/node-hid/package.json
+!node_modules/node-hid/LICENSE-bsd.txt
+
+# Only Windows loads node-hid — macOS goes through bin/spacemoused — so the
+# other platforms' prebuilds and the hidapi sources they were built from are
+# dead weight in the package.
+!node_modules/node-hid/prebuilds/HID-win32-*/**

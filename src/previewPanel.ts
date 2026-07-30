@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import { PathData } from './server';
 import { SpaceMouseState } from './spacemouseHost';
+import { SpaceMouseGate } from './spacemouseGate';
 
 export class PreviewPanel {
     static instance: PreviewPanel | undefined;
 
     private readonly panel: vscode.WebviewPanel;
     private readonly extensionUri: vscode.Uri;
+    private readonly spaceMouseGate: SpaceMouseGate;
 
     private constructor(
         extensionUri: vscode.Uri,
@@ -25,8 +27,10 @@ export class PreviewPanel {
             }
         );
         this.panel.webview.html = this.buildHtml();
+        this.spaceMouseGate = new SpaceMouseGate(this.panel);
         this.panel.onDidDispose(() => {
             PreviewPanel.instance = undefined;
+            this.spaceMouseGate.dispose();
             onClosed();
         });
         onOpened();
@@ -46,7 +50,7 @@ export class PreviewPanel {
     }
 
     postSpaceMouse(state: SpaceMouseState): void {
-        this.panel.webview.postMessage(state);
+        this.spaceMouseGate.post(state);
     }
 
     postComputing(computing: boolean): void {

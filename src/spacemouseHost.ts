@@ -1,45 +1,53 @@
-import { execFile } from 'child_process';
+import { Axes, Backend } from './spacemouseBackend';
+import { HelperBackend } from './spacemouseHelper';
+import { HidBackend } from './spacemouseHid';
 
-// ---- node-hid (native module, external in esbuild) ----
-// Use require so esbuild leaves it as-is (marked --external:node-hid).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const nodeHid = require('node-hid') as {
-    devices: (vid: number, pid: number) => Array<{
-        path?: string;
-        product?: string;
-        productId?: number;
-    }>;
-    HID: new (path: string) => {
-        on(event: 'data',  listener: (data: Buffer) => void): void;
-        on(event: 'error', listener: (err: unknown) => void): void;
-        close(): void;
-    };
-};
+/**
+ * Reads a 3Dconnexion SpaceMouse and publishes its state to listeners.
+ *
+ * How the puck is read differs by platform, so the actual reading lives in a
+ * backend (`spacemouseHelper.ts` on macOS, `spacemouseHid.ts` on Windows) and
+ * this class owns everything that does not: the published state, the listeners,
+ * and the release detection. Whichever backend is in use, the 3Dconnexion driver
+ * is never touched, so the puck keeps working in Fusion 360 and elsewhere.
+ */
 
 // ---- Constants ----
 
-const VENDOR_ID = 0x256f; // 3Dconnexion
-
-const HELPER_APP  = '/Applications/3DconnexionHelper.app';
-const HELPER_PROC = '3DconnexionHelper';
+/**
+ * The puck streams continuously while it is displaced and stops when it
+ * re-centres. It normally sends a zero frame on release, but if one is ever
+ * dropped the webview would keep applying the last non-zero axes every frame, so
+ * a stall is treated as "released".
+ */
+const IDLE_MS = 250;
 
 // ---- Types ----
 
-export interface SpaceMouseState {
+export interface SpaceMouseState extends Axes {
     type: 'spacemouse';
-    tx: number; ty: number; tz: number;
-    rx: number; ry: number; rz: number;
     connected: boolean;
     deviceName: string;
 }
 
 type Listener = (state: SpaceMouseState) => void;
 
+/** Called when the SpaceMouse cannot be read, so the reason reaches the user. */
+type StatusListener = (message: string) => void;
+
+/** Verbose diagnostics sink (an output channel), separate from user-facing status. */
+type Logger = (message: string) => void;
+
 // ---- SpaceMouseHost ----
 
 export class SpaceMouseHost {
-    private device: ReturnType<typeof nodeHid.HID> | null = null;
-    private deviceName = '';
+    private backend: Backend | null = null;
+    private stopped = false;
+    /** Set while a failure has been shown, so a retrying backend only warns once. */
+    private reported = false;
+    private active = false;
+    private idleTimer: ReturnType<typeof setTimeout> | null = null;
+    private listeners: Listener[] = [];
     private state: SpaceMouseState = {
         type: 'spacemouse',
         tx: 0, ty: 0, tz: 0,
@@ -47,26 +55,57 @@ export class SpaceMouseHost {
         connected: false,
         deviceName: '',
     };
-    private listeners: Listener[] = [];
-    private disposed = false;
-    private retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /**
+     * @param helperPath Absolute path to the bundled `spacemoused` binary (macOS).
+     */
+    constructor(
+        private readonly helperPath: string,
+        private readonly onStatus: StatusListener,
+        private readonly log: Logger,
+    ) {}
 
     // ---- Lifecycle ----
 
-    /** Stop 3DconnexionHelper then open the SpaceMouse directly. */
-    async start(): Promise<void> {
-        await this.stopHelper();
-        // Wait for the driver to release the device
-        await this.delay(600);
-        this.openDevice();
+    start(): void {
+        const callbacks = {
+            axes: (values: Axes) => this.onAxes(values),
+            connected: (deviceName: string) => {
+                this.reported = false;
+                this.updateState({ connected: true, deviceName });
+            },
+            unavailable: (message: string) => this.unavailable(message),
+            log: this.log,
+        };
+
+        if (process.platform === 'darwin') {
+            this.backend = new HelperBackend(this.helperPath, callbacks);
+        } else if (process.platform === 'win32') {
+            this.backend = new HidBackend(callbacks);
+        } else {
+            // Linux would need udev rules, and spacenavd may hold the device.
+            this.unavailable(`SpaceMouse support is not available on ${process.platform}`);
+            return;
+        }
+
+        this.backend.setActive(this.active);
+        this.backend.start();
     }
 
-    /** Close HID device and restart 3DconnexionHelper. */
-    async stop(): Promise<void> {
-        this.disposed = true;
-        if (this.retryTimer) { clearTimeout(this.retryTimer); }
-        this.closeDevice();
-        await this.startHelper();
+    /** Release the puck. The 3Dconnexion driver is never touched. */
+    stop(): void {
+        this.stopped = true;
+        if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
+        this.backend?.stop();
+        this.backend = null;
+    }
+
+    /** Follow VS Code window focus. See `Backend.setActive`. */
+    setActive(active: boolean): void {
+        if (active === this.active) { return; }
+        this.active = active;
+        this.backend?.setActive(active);
+        if (!active) { this.zeroAxes(); }
     }
 
     // ---- Listeners ----
@@ -83,102 +122,28 @@ export class SpaceMouseHost {
 
     // ---- Private ----
 
-    private openDevice(): void {
-        if (this.disposed) { return; }
-        const devs = nodeHid.devices(VENDOR_ID, 0)
-            .filter(d => d.product === 'SpaceMouse Wireless' || d.product?.includes('SpaceMouse'));
-
-        // Use the first unique path
-        const seen = new Set<string>();
-        const unique = devs.filter(d => {
-            if (!d.path || seen.has(d.path)) { return false; }
-            seen.add(d.path);
-            return true;
-        });
-
-        if (unique.length === 0) {
-            this.scheduleRetry();
-            return;
-        }
-
-        try {
-            this.device = new nodeHid.HID(unique[0].path!);
-            this.deviceName = unique[0].product ?? 'SpaceMouse';
-            this.updateState({ connected: true, deviceName: this.deviceName });
-
-            this.device.on('data', (data: Buffer) => {
-                const reportId = data[0];
-                if (reportId === 1 && data.length >= 13) {
-                    // SpaceMouse Wireless: all 6 axes in one 13-byte report
-                    this.updateState({
-                        tx: data.readInt16LE(1),
-                        ty: data.readInt16LE(3),
-                        tz: data.readInt16LE(5),
-                        rx: data.readInt16LE(7),
-                        ry: data.readInt16LE(9),
-                        rz: data.readInt16LE(11),
-                    });
-                } else if (reportId === 1 && data.length >= 7) {
-                    // Classic format (SpaceMouse Compact/Pro): translation only
-                    this.updateState({
-                        tx: data.readInt16LE(1),
-                        ty: data.readInt16LE(3),
-                        tz: data.readInt16LE(5),
-                    });
-                } else if (reportId === 2 && data.length >= 7) {
-                    // Classic format: rotation only
-                    this.updateState({
-                        rx: data.readInt16LE(1),
-                        ry: data.readInt16LE(3),
-                        rz: data.readInt16LE(5),
-                    });
-                }
-            });
-
-            this.device.on('error', (_err: unknown) => {
-                this.closeDevice();
-                this.scheduleRetry();
-            });
-        } catch (_err) {
-            this.scheduleRetry();
-        }
+    private onAxes(values: Axes): void {
+        this.updateState(values);
+        if (this.idleTimer) { clearTimeout(this.idleTimer); }
+        this.idleTimer = setTimeout(() => this.zeroAxes(), IDLE_MS);
     }
 
-    private closeDevice(): void {
-        if (this.device) {
-            try { this.device.close(); } catch (_) { /* ignore */ }
-            this.device = null;
-        }
-        this.updateState({ connected: false, tx: 0, ty: 0, tz: 0, rx: 0, ry: 0, rz: 0 });
+    private zeroAxes(): void {
+        if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
+        this.updateState({ tx: 0, ty: 0, tz: 0, rx: 0, ry: 0, rz: 0 });
     }
 
-    private scheduleRetry(): void {
-        if (this.disposed) { return; }
-        this.retryTimer = setTimeout(() => this.openDevice(), 2000);
+    private unavailable(message: string): void {
+        if (this.stopped || this.reported) { return; }
+        this.reported = true;
+        this.log(`SpaceMouse unavailable: ${message}`);
+        this.updateState({ connected: false, deviceName: '', tx: 0, ty: 0, tz: 0, rx: 0, ry: 0, rz: 0 });
+        this.onStatus(message);
     }
 
     private updateState(patch: Partial<SpaceMouseState>): void {
         Object.assign(this.state, patch);
         const snapshot = { ...this.state };
         this.listeners.forEach(fn => fn(snapshot));
-    }
-
-    // ---- Driver helpers ----
-
-    private stopHelper(): Promise<void> {
-        return new Promise((resolve) => {
-            execFile('pkill', ['-f', HELPER_PROC], () => resolve());
-            // Ignore exit code — process may not be running
-        });
-    }
-
-    private startHelper(): Promise<void> {
-        return new Promise((resolve) => {
-            execFile('open', [HELPER_APP], () => resolve());
-        });
-    }
-
-    private delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
