@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { PathData } from './server';
 import { SpaceMouseState } from './spacemouseHost';
 import { SpaceMouseGate } from './spacemouseGate';
+import { previewViewColumn, trackPreviewPanel } from './previewLayout';
 
 export class PreviewPanel {
     static instance: PreviewPanel | undefined;
@@ -19,13 +20,14 @@ export class PreviewPanel {
         this.panel = vscode.window.createWebviewPanel(
             'gcoordinatorPreview',
             'gcoordinator Preview',
-            vscode.ViewColumn.Beside,
+            { viewColumn: previewViewColumn(), preserveFocus: true },
             {
                 enableScripts: true,
                 localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
                 retainContextWhenHidden: true,
             }
         );
+        trackPreviewPanel(this.panel);
         this.panel.webview.html = this.buildHtml();
         this.spaceMouseGate = new SpaceMouseGate(this.panel);
         this.panel.onDidDispose(() => {
@@ -42,7 +44,9 @@ export class PreviewPanel {
         onClosed:  () => void = () => {},
     ): PreviewPanel {
         if (PreviewPanel.instance) {
-            PreviewPanel.instance.panel.reveal(vscode.ViewColumn.Beside, true);
+            // No column argument: keep the panel in the group it already lives
+            // in instead of dragging it beside whatever is active right now.
+            PreviewPanel.instance.panel.reveal(undefined, true);
             return PreviewPanel.instance;
         }
         PreviewPanel.instance = new PreviewPanel(extensionUri, onOpened, onClosed);

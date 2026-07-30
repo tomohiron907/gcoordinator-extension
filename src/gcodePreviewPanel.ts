@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { parseGCode, GCodeParseResult } from './gcodeParser';
 import { SpaceMouseState } from './spacemouseHost';
 import { SpaceMouseGate } from './spacemouseGate';
+import { previewViewColumn, trackPreviewPanel } from './previewLayout';
 
 export class GCodePreviewPanel {
     static instance: GCodePreviewPanel | undefined;
@@ -25,13 +26,14 @@ export class GCodePreviewPanel {
         this.panel = vscode.window.createWebviewPanel(
             'gcodePreview',
             'G-code Preview',
-            vscode.ViewColumn.Beside,
+            { viewColumn: previewViewColumn(), preserveFocus: true },
             {
                 enableScripts: true,
                 localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
                 retainContextWhenHidden: true,
             }
         );
+        trackPreviewPanel(this.panel);
         this.panel.webview.html = this.buildHtml();
         this.spaceMouseGate = new SpaceMouseGate(this.panel);
         this.panel.onDidDispose(() => {
@@ -52,7 +54,7 @@ export class GCodePreviewPanel {
         onClosed:  () => void = () => {},
     ): Promise<void> {
         if (GCodePreviewPanel.instance) {
-            GCodePreviewPanel.instance.panel.reveal(vscode.ViewColumn.Beside, true);
+            GCodePreviewPanel.instance.panel.reveal(undefined, true);
             if (GCodePreviewPanel.instance.document?.uri.toString() !== document.uri.toString()) {
                 await GCodePreviewPanel.instance.loadDocument(document);
             }
