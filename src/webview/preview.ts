@@ -224,11 +224,6 @@ function b64ToFloat32Array(b64: string): Float32Array {
     return new Float32Array(bytes.buffer);
 }
 
-function valueToColor(t: number): THREE.Color {
-    // hue: red (0°) at bottom → blue (240°) at top
-    return new THREE.Color().setHSL((t * 240) / 360, 1.0, 0.55);
-}
-
 // ---- Diamond tube geometry builder ----
 
 const _Z_AXIS = new THREE.Vector3(0, 0, 1);
@@ -357,22 +352,12 @@ window.addEventListener('message', (event: MessageEvent) => {
     const allCoords = b64ToFloat32Array(coords_b64);
     const travelCoords = travel_coords_b64 ? b64ToFloat32Array(travel_coords_b64) : new Float32Array(0);
 
-    // Z range for color mapping
-    let zMin = Infinity, zMax = -Infinity;
-    for (let i = 2; i < allCoords.length; i += 3) {
-        if (allCoords[i] < zMin) { zMin = allCoords[i]; }
-        if (allCoords[i] > zMax) { zMax = allCoords[i]; }
-    }
-    const zRange = zMax - zMin || 1;
-
     // Build one diamond-tube Mesh per path
     let offset = 0;
     for (let pi = 0; pi < path_lengths.length; pi++) {
         const len = path_lengths[pi];
         const positions = allCoords.slice(offset * 3, (offset + len) * 3);
 
-        let zSum = 0;
-        for (let i = 2; i < positions.length; i += 3) { zSum += positions[i]; }
         const geometry = buildDiamondTube(positions, len, nozzleSize);
         const material = new THREE.MeshPhongMaterial({ color: new THREE.Color(pathColor), side: THREE.FrontSide, flatShading: true, shininess: 60 });
         const mesh = new THREE.Mesh(geometry, material);
