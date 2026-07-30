@@ -1,6 +1,7 @@
 node_modules/
 out/
 media/preview.bundle.js
+media/gcodePreview.bundle.js
 *.vsix
 
 bin/
