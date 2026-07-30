@@ -50,8 +50,8 @@ export class GCodePreviewPanel {
     static async createOrShow(
         extensionUri: vscode.Uri,
         document: vscode.TextDocument,
-        onOpened: () => void = () => {},
-        onClosed:  () => void = () => {},
+        onOpened: () => void,
+        onClosed: () => void,
     ): Promise<void> {
         if (GCodePreviewPanel.instance) {
             GCodePreviewPanel.instance.panel.reveal(undefined, true);

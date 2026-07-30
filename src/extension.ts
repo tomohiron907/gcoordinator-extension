@@ -93,7 +93,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Start the local HTTP server that receives data from the Python library
     server = new PreviewServer(port, (data) => {
-        PreviewPanel.createOrShow(context.extensionUri);
+        PreviewPanel.createOrShow(context.extensionUri, onPanelOpened, onPanelClosed);
         PreviewPanel.instance?.postData(data);
     });
 

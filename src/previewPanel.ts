@@ -38,10 +38,12 @@ export class PreviewPanel {
         onOpened();
     }
 
+    // onOpened/onClosed drive the SpaceMouse lifecycle, so every caller must
+    // pass them — a caller that skips them leaves the panel without a puck.
     static createOrShow(
         extensionUri: vscode.Uri,
-        onOpened: () => void = () => {},
-        onClosed:  () => void = () => {},
+        onOpened: () => void,
+        onClosed: () => void,
     ): PreviewPanel {
         if (PreviewPanel.instance) {
             // No column argument: keep the panel in the group it already lives
