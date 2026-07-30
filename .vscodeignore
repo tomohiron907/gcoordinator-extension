@@ -11,9 +11,11 @@
 src/**
 native/**
 docs/**
+scripts/**
 tsconfig.json
 **/*.map
 **/*.pdf
+**/*.vsix
 
 node_modules/**
 

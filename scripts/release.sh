@@ -222,13 +222,14 @@ require_entry "extension/changelog.md" "The Marketplace changelog tab would be e
 require_entry "extension/LICENSE.txt" "The Marketplace license tab would be empty."
 
 # 3DxMacWare SDK.pdf is 3Dconnexion reference material and must never ship.
-# src/ and native/ are excluded to keep the package small.
-if printf '%s\n' "$ENTRIES" | grep -qiE '\.pdf$|^extension/src/|^extension/native/'; then
-  die "the vsix contains files that must not be redistributed:
-$(printf '%s\n' "$ENTRIES" | grep -iE '\.pdf$|^extension/src/|^extension/native/' | sed 's/^/         /')
+# Everything else here is a build input that just bloats the package.
+FORBIDDEN='\.pdf$|\.vsix$|^extension/src/|^extension/native/|^extension/scripts/|^extension/docs/'
+if printf '%s\n' "$ENTRIES" | grep -qiE "$FORBIDDEN"; then
+  die "the vsix contains files that should not ship:
+$(printf '%s\n' "$ENTRIES" | grep -iE "$FORBIDDEN" | sed 's/^/         /')
        Check .vscodeignore. Nothing has been published."
 fi
-ok "no PDFs, no source, no native sources"
+ok "no PDFs, no sources, no scripts or docs"
 
 if [ "$DRY_RUN" -eq 1 ]; then
   step "Dry run complete"

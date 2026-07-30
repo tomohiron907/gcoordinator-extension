@@ -141,7 +141,8 @@ publish の直前に、実際に固まった vsix を `unzip` して以下を as
 | `extension/readme.md` / `changelog.md` / `LICENSE.txt` | Marketplace のページが空 |
 | `package.json` のバージョン一致 | 意図しないバージョンが出る |
 
-加えて、`.pdf` と `src/` と `native/` が**入っていないこと**も確認する。
+加えて、`.pdf` / `src/` / `native/` / `scripts/` / `docs/` が
+**入っていないこと**も確認する。
 `3DxMacWare SDK.pdf` は 3Dconnexion の資料で再配布できないため、
 git 履歴からも削除済み。二度とコミットしないこと（`.gitignore` 済み）。
 
