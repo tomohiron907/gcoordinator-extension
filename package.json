@@ -1,12 +1,30 @@
 {
   "name": "gcoordinator-extension",
   "displayName": "gcoordinator",
-  "description": "3D preview for gcoordinator G-code paths",
-  "version": "0.0.1",
+  "description": "Live 3D preview for gcoordinator toolpaths and G-code, with SpaceMouse support",
+  "version": "0.1.0",
+  "publisher": "tomohiron907",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tomohiron907/gcoordinator-extension.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tomohiron907/gcoordinator-extension/issues"
+  },
+  "homepage": "https://github.com/tomohiron907/gcoordinator-extension#readme",
+  "keywords": [
+    "gcode",
+    "3d-printing",
+    "gcoordinator",
+    "python",
+    "spacemouse"
+  ],
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": [
+    "Visualization",
     "Other"
   ],
   "activationEvents": [
@@ -65,6 +83,9 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run build",
+    "package": "npm run build:native && npm run build && vsce package",
+    "publish": "npm run build:native && npm run build && vsce publish",
     "build": "npm run build:ext && npm run build:webview && npm run build:gcode-webview",
     "build:ext": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:node-hid --outfile=out/extension.js",
     "build:webview": "esbuild src/webview/preview.ts --bundle --outfile=media/preview.bundle.js",
@@ -80,6 +101,7 @@
     "@types/node": "^20.0.0",
     "@types/three": "^0.160.0",
     "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.9.2",
     "concurrently": "^8.0.0",
     "esbuild": "^0.20.0",
     "three": "^0.160.0",

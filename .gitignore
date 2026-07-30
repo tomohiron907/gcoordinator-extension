@@ -4,3 +4,5 @@ media/preview.bundle.js
 *.vsix
 
 bin/
+# 3Dconnexion SDK docs — reference material, not ours to redistribute
+3DxMacWare SDK.pdf
