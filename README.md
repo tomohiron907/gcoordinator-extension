@@ -48,6 +48,10 @@ Linux is not supported. A mouse works fine everywhere — SpaceMouse is optional
 - **Python 3** on your PATH (or set `gcoordinator.pythonPath`), with the
   `gcoordinator` package installed — only needed for Live Preview. G-code
   preview works without Python.
+  We strongly recommend [uv](https://docs.astral.sh/uv/) for this:
+  `uv init --python 3.12 my-prints && cd my-prints && uv add gcoordinator`,
+  then set `gcoordinator.pythonPath` to `.venv/bin/python`
+  (`.venv\Scripts\python.exe` on Windows).
 - **SpaceMouse only:** the 3Dconnexion driver (3DxWare on Windows,
   3DxMacWare on macOS) installed and running.
 

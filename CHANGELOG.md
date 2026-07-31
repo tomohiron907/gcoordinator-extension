@@ -5,6 +5,14 @@ All notable changes to the gcoordinator extension are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-07-31
+
+### Changed
+
+- Requirements now recommend setting up the Python environment with
+  [uv](https://docs.astral.sh/uv/), including the `gcoordinator.pythonPath`
+  value to use with a uv-managed `.venv`.
+
 ## [0.1.1] - 2026-07-31
 
 ### Fixed
