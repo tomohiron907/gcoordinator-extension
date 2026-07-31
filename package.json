@@ -2,7 +2,7 @@
   "name": "gcoordinator-extension",
   "displayName": "gcoordinator",
   "description": "Live 3D preview for gcoordinator toolpaths and G-code, with SpaceMouse support",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "tomohiron907",
   "license": "MIT",
   "icon": "media/icon.png",
