@@ -7,3 +7,4 @@ media/gcodePreview.bundle.js
 bin/
 # 3Dconnexion SDK docs — reference material, not ours to redistribute
 3DxMacWare SDK.pdf
+.DS_Store
