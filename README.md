@@ -7,6 +7,9 @@ geometry update — no separate viewer window, no manual export step.
 Also renders plain `.gcode` files, and supports 3Dconnexion SpaceMouse for
 navigating the view.
 
+<!-- Absolute URL on purpose: the Marketplace does not resolve relative paths. -->
+![gcoordinator extension](https://raw.githubusercontent.com/tomohiron907/gcoordinator-extension/main/media/gcoordinator-extension.png)
+
 ## Features
 
 ### Live Preview

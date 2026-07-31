@@ -5,6 +5,23 @@ All notable changes to the gcoordinator extension are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-07-31
+
+### Fixed
+
+- The 3D preview now opens in the VS Code window you ran your script from.
+  Every window activates the extension and races for the same port, and only the
+  winner received a script's output — so with more than one window open, a
+  preview could appear in a window you weren't working in. The focused window
+  now takes the port, which also makes `python script.py` from a terminal
+  preview where you ran it.
+- A preview dragged into a floating window and closed no longer keeps sending
+  later previews to that vanished editor group.
+
+### Added
+
+- Extension icon and a screenshot on the Marketplace listing.
+
 ## [0.1.0] - 2026-07-31
 
 First public release.

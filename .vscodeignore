@@ -17,6 +17,11 @@ tsconfig.json
 **/*.pdf
 **/*.vsix
 
+# The README screenshot is served to the Marketplace from raw.githubusercontent
+# (relative paths don't resolve there), so shipping the 2 MB original would only
+# double the vsix for nobody's benefit. media/icon.png does have to ship.
+media/gcoordinator-extension.png
+
 node_modules/**
 
 # node-hid resolves its prebuilt binding through pkg-prebuilds at runtime, so
