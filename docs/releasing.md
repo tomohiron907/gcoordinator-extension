@@ -184,12 +184,20 @@ https://marketplace.visualstudio.com/manage/publishers/tomohiron907
 
 ---
 
+## 画像の扱い（0.1.1 で対応済み）
+
+| ファイル | 用途 | vsix に入るか |
+| --- | --- | --- |
+| `media/icon.png` | `package.json` の `"icon"`。Marketplace のアイコン | **入る**（必須） |
+| `media/gcoordinator-extension.png` | README のスクリーンショット | 入らない |
+
+Marketplace の README は**相対パスを解決しない**ので、スクリーンショットは
+`https://raw.githubusercontent.com/tomohiron907/gcoordinator-extension/main/media/...`
+の絶対 URL で貼る。GitHub から配信されるため vsix に同梱する必要がなく、
+2MB の原寸画像がパッケージを膨らませないよう `.vscodeignore` で除外している。
+アイコンだけは vsix に入っていないと表示されないので除外しないこと。
+
 ## まだ手付かずのこと
 
-- **アイコン** — `media/icon.png`（128x128）を置いて `package.json` に
-  `"icon": "media/icon.png"` を足す。Marketplace の見栄えがかなり変わる
-- **スクリーンショット / GIF** — README に貼る。Marketplace では相対パスが
-  解決されないので `https://raw.githubusercontent.com/tomohiron907/gcoordinator-extension/main/...`
-  の絶対 URL で書くこと
 - **GitHub Release** — 今はタグを push するだけ。`gh` を入れれば
   `gh release create` で vsix を添付できる
