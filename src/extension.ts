@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { PreviewServer } from './server';
+import { PreviewServer, startWithTakeover } from './server';
 import { PreviewPanel } from './previewPanel';
 import { GCodePreviewPanel } from './gcodePreviewPanel';
 import { SpaceMouseHost, SpaceMouseState } from './spacemouseHost';
@@ -10,6 +10,19 @@ let server: PreviewServer | undefined;
 let spaceMouse: SpaceMouseHost | undefined;
 let scriptWatcher: ScriptWatcher | undefined;
 let spaceMouseLog: vscode.OutputChannel | undefined;
+
+// Every window activates this extension and races for the same port, but only
+// the holder receives a script's output. The focused window therefore takes the
+// port, so `python script.py` in a terminal previews in the window it was run
+// from instead of in whichever window happened to boot first.
+let ownsPort = false;
+let port = 5163; // set from configuration in activate()
+let claimChain: Promise<void> = Promise.resolve();
+let focusClaimTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Alt-tabbing across several windows would otherwise hand the port down the
+// whole chain; only the window the user settles on needs it.
+const FOCUS_CLAIM_DELAY_MS = 150;
 
 // Set during activate(). The panel callbacks below are passed to the panels as
 // bare functions and never see the ExtensionContext, so the path is kept here.
@@ -57,6 +70,36 @@ function onPanelClosed(): void {
     }
 }
 
+/**
+ * Hand the port to the window the user just moved to. A watcher running here is
+ * deliberately left alone: saving a file in this window focuses it, which claims
+ * the port back long before the script finishes, so its preview still lands here.
+ */
+function releasePort(): void {
+    ownsPort = false;
+    server?.stop();
+}
+
+/**
+ * Take the preview port for this window. A script POSTs to a fixed port with no
+ * way to say which window ran it, so ownership is the only thing that decides
+ * where a preview appears — and the window the user is looking at is the window
+ * that ran the script.
+ */
+function claimPort(): Promise<void> {
+    // Serialised: focus can flip faster than a handover completes, and two
+    // overlapping listen() attempts on one server would fight each other.
+    const claim = claimChain.then(async () => {
+        if (ownsPort) { return; }
+        await startWithTakeover(server!, port);
+        ownsPort = true;
+    });
+    // A failed claim (something else is on the port) must not poison the chain
+    // and block every later attempt. Callers report the failure if they care.
+    claimChain = claim.catch(() => { /* handled by the caller */ });
+    return claim;
+}
+
 /** Stop the helper and hand the puck back to the driver. */
 function releaseSpaceMouse(): void {
     if (!spaceMouse) { return; }
@@ -72,7 +115,7 @@ function forwardToWebviews(state: SpaceMouseState): void {
 
 export function activate(context: vscode.ExtensionContext): void {
     const config = vscode.workspace.getConfiguration('gcoordinator');
-    const port: number = config.get('port', 5163);
+    port = config.get('port', 5163);
 
     // SpaceMouse helper diagnostics — View > Output > "gcoordinator SpaceMouse"
     spaceMouseLog = vscode.window.createOutputChannel('gcoordinator SpaceMouse');
@@ -88,20 +131,44 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.window.onDidChangeWindowState((state) => {
             spaceMouse?.setActive(state.focused);
+            if (!state.focused) { return; }
+            // Claim on focus, not on blur: whoever the user leaves for might not
+            // be a VS Code window at all, and the port has to end up somewhere.
+            if (focusClaimTimer) { clearTimeout(focusClaimTimer); }
+            focusClaimTimer = setTimeout(() => {
+                // Silent: another program sitting on the port is reported when
+                // the user actually asks for a preview, not on every focus.
+                claimPort().catch(() => { /* reported by startPreview */ });
+            }, FOCUS_CLAIM_DELAY_MS);
         }),
     );
 
     // Start the local HTTP server that receives data from the Python library
-    server = new PreviewServer(port, (data) => {
-        PreviewPanel.createOrShow(context.extensionUri, onPanelOpened, onPanelClosed);
-        PreviewPanel.instance?.postData(data);
-    });
+    server = new PreviewServer(
+        port,
+        (data) => {
+            PreviewPanel.createOrShow(context.extensionUri, onPanelOpened, onPanelClosed);
+            PreviewPanel.instance?.postData(data);
+        },
+        () => releasePort(),
+    );
 
-    server.start().catch((err) => {
-        vscode.window.showErrorMessage(
-            `[gcoordinator] Failed to start preview server on port ${port}: ${err.message}`
+    // A window that loses the race is the normal case with several windows open,
+    // so it stays quiet. The focused one takes the port off the winner right
+    // away; the rest wait for the user to switch to them.
+    if (vscode.window.state.focused) {
+        claimPort().catch(() => { /* reported by startPreview */ });
+    } else {
+        server.start().then(
+            () => { ownsPort = true; },
+            (err) => {
+                if (err?.code === 'EADDRINUSE') { return; }
+                vscode.window.showErrorMessage(
+                    `[gcoordinator] Failed to start preview server on port ${port}: ${err.message}`
+                );
+            },
         );
-    });
+    }
 
     // Command to preview the currently open G-code file
     const gcodeCmd = vscode.commands.registerCommand('gcoordinator.previewGCode', async () => {
@@ -123,7 +190,7 @@ export function activate(context: vscode.ExtensionContext): void {
     scriptWatcher = new ScriptWatcher();
     context.subscriptions.push(scriptWatcher);
 
-    const startLiveCmd = vscode.commands.registerCommand('gcoordinator.startPreview', () => {
+    const startLiveCmd = vscode.commands.registerCommand('gcoordinator.startPreview', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
             vscode.window.showWarningMessage('[gcoordinator] Open a Python file first.');
@@ -133,6 +200,20 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.window.showWarningMessage('[gcoordinator] Active file is not a .py file.');
             return;
         }
+
+        // Take the port before opening anything: without it the script's output
+        // would be rendered by another window and the panel here would sit empty.
+        try {
+            await claimPort();
+        } catch (err) {
+            vscode.window.showErrorMessage(
+                `[gcoordinator] Port ${port} is in use by another process. `
+                + `Change "gcoordinator.port" and reload the window. `
+                + `(${(err as Error).message})`
+            );
+            return;
+        }
+
         PreviewPanel.createOrShow(context.extensionUri, onPanelOpened, onPanelClosed);
         scriptWatcher!.start(editor.document.uri, (computing) => {
             PreviewPanel.instance?.postComputing(computing);
@@ -151,6 +232,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+    if (focusClaimTimer) { clearTimeout(focusClaimTimer); focusClaimTimer = undefined; }
     server?.stop();
     scriptWatcher?.dispose();
     releaseSpaceMouse();

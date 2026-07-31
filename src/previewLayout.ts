@@ -8,6 +8,14 @@ let openPreviews = 0;
 
 /** Column a preview panel should be created in. */
 export function previewViewColumn(): vscode.ViewColumn {
+    // A remembered column can outlive its group — dragging a preview into a
+    // floating window and closing it would otherwise keep sending new previews
+    // to a group that is no longer on screen. Fall back to Beside, which always
+    // resolves against the group the user is working in right now.
+    if (previewColumn !== undefined
+        && !vscode.window.tabGroups.all.some(g => g.viewColumn === previewColumn)) {
+        previewColumn = undefined;
+    }
     return previewColumn ?? vscode.ViewColumn.Beside;
 }
 

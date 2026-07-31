@@ -91,6 +91,12 @@ Your script sends its computed paths to `POST /preview` as a MessagePack payload
 and the extension renders them with three.js. Nothing leaves your machine, and
 the server is not reachable from the network.
 
+A script has no way to say which VS Code window launched it, so the port decides:
+only one window listens on it at a time, and that window renders every preview.
+The **focused** window takes the port, which is what makes `python script.py` in
+a terminal preview in the window you ran it from. Switching windows moves the
+port with you; nothing else about a running Live Preview changes.
+
 ## Troubleshooting
 
 **The preview stays empty when I save.**
@@ -99,7 +105,15 @@ traceback or a `Spawn error`. If Python can't be found, set
 `gcoordinator.pythonPath` to an absolute interpreter path.
 
 **Port 5163 is already in use.**
-Change `gcoordinator.port` and reload the window.
+Another VS Code window holding the port is fine and expected — focusing this
+window takes it over automatically. You only need to change `gcoordinator.port`
+(and reload the window) if some *other* program is occupying it, which Start
+Preview reports as an error instead of opening an empty preview.
+
+**The preview opened in a different VS Code window.**
+The window that had focus receives the preview. Click into the window you want it
+in before running your script — including when you run it from an external
+terminal, where the last VS Code window you touched is the one that gets it.
 
 **SpaceMouse doesn't respond.**
 Open **View → Output → gcoordinator SpaceMouse**. On a successful connection
